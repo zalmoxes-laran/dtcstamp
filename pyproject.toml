@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 # `PACKAGE` constant, and nowhere else: never inside a field of the format, so
 # renaming it costs a `sed` and invalidates no file anybody has already written.
 name = "dtcstamp"
-version = "0.1.0"
+version = "0.1.1"
 description = "Read, write, compare and walk DTC stamps — the immutable record of one step of a chain"
 readme = "README.md"
 requires-python = ">=3.9"
