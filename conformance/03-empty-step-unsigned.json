@@ -1,0 +1,24 @@
+{
+ "case": "the empty step, WITHOUT a how — the opposite meaning",
+ "why": "The same `from: []` and the OPPOSITE sentence: «I do not know how this was made». Written identically, so a reader that does not ask `declared_origin` will confuse them — which is precisely how a false provenance gets made.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:orphan",
+   "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "digest_covers": "artifact",
+   "packaging": "file"
+  },
+  "from": [],
+  "by": {
+   "at": "2026-09-15T10:00:00Z"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "verifiable",
+  "verifiable": true,
+  "parents": 0,
+  "declared_origin": false
+ }
+}

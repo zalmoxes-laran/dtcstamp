@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# THE NAME IS PROVISIONAL. It was needed to write the code, not decided — see
+# README §The name. It lives here, in the module's file name, and in the
+# `PACKAGE` constant, and nowhere else: never inside a field of the format, so
+# renaming it costs a `sed` and invalidates no file anybody has already written.
+name = "dtcstamp"
+version = "0.1.0"
+description = "Read, write, compare and walk DTC stamps — the immutable record of one step of a chain"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "Emanuel Demetrescu", email = "emanuel.demetrescu@cnr.it"},
+]
+keywords = ["provenance", "digest", "archaeology", "heritage", "extended-matrix",
+            "crmdig", "prov-o"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+# ZERO THIRD-PARTY DEPENDENCIES, and this empty list is the point of the package
+# rather than an accident of its youth. A test measures it from the interpreter's
+# own `sys.stdlib_module_names` instead of trusting this line.
+dependencies = []
+
+# ONE MODULE, not a package directory: the promise is «copy a file», and a
+# directory would break it silently — the tests would still pass and somebody's
+# Blender add-on would fail at import.
+[tool.setuptools]
+py-modules = ["dtcstamp"]

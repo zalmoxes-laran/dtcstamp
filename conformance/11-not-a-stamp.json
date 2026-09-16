@@ -1,0 +1,19 @@
+{
+ "case": "an em.json fragment, which is a DIFFERENT SPECIES",
+ "why": "No `stamp` version key. Refused with the word that matters: a stamp is a record, not a document to merge, edit and version — and somebody WILL hand this library an em.json one day.",
+ "stamp": {
+  "header": {
+   "format": "em.json",
+   "version": "1.0"
+  },
+  "graph": {
+   "graph_id": "g",
+   "nodes": [],
+   "edges": []
+  }
+ },
+ "expect": {
+  "valid": false,
+  "error_contains": "em.json fragment"
+ }
+}

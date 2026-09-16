@@ -1,0 +1,35 @@
+{
+ "case": "a walk that stops, and says WHERE it did not arrive",
+ "why": "«There was a parent with this id and this digest, and I do not have it» is a RESULT, not an error. The library does not know where things are: the resolver is the caller's, and `unreached` is the edge of what THIS caller can see from where it is standing.",
+ "resolvable": {},
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:leaf",
+   "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+   "packaging": "file"
+  },
+  "from": [
+   {
+    "resource_id": "res:missing",
+    "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "label": "la nuvola del 2015"
+   },
+   {
+    "resource_id": "acq:1",
+    "kind": "acquisition",
+    "label": "campagna Aiano 2015"
+   }
+  ]
+ },
+ "expect": {
+  "walk_rungs": 2,
+  "walk_reached": 0,
+  "walk_unreached": 2,
+  "walk_why": [
+   "not resolved",
+   "not a file"
+  ],
+  "walk_truncated": false
+ }
+}

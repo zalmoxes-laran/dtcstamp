@@ -1,0 +1,22 @@
+{
+ "case": "an emstruct1 digest — comparable, NOT verifiable",
+ "why": "A datablock inside a .blend has no canonical bytes: the structural fingerprint is enough to notice it CHANGED, not to prove it is the same one. An interface writing «verified» next to this is lying with an icon.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:blendmesh",
+   "digest": "emstruct1:9999999999999999999999999999999999999999",
+   "digest_covers": "artifact",
+   "packaging": "datablock",
+   "tier": "master"
+  },
+  "from": []
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "comparable",
+  "verifiable": false,
+  "parents": 0,
+  "declared_origin": false
+ }
+}

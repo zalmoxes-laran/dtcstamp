@@ -1,0 +1,55 @@
+{
+ "case": "the apparatus is an identity and the place is values",
+ "why": "The first enrichment that tests the format's admission rule. A device used to be a STRING and could not be asked anything; it is now an id plus a label, and `distinguishes` says whether that id names one BODY (`serial`) or a MODEL that two identical bodies share (`make+model`) — a declared merge rather than an invented distinction. The location is numbers plus an EPSG code plus `source`, which tells a measurement (`exif`) from somebody's word (`stated`): the same discipline identity_strength applies to a digest. NEITHER carries a type: a reader can use both without knowing that graphs, nodes or classes exist anywhere.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:orto",
+   "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+   "digest_covers": "artifact",
+   "media_type": "image/tiff",
+   "packaging": "file",
+   "tier": "distribution"
+  },
+  "from": [],
+  "how": {
+   "process_id": "proc:d41e",
+   "dtc_kind": "photogrammetry",
+   "acquisition": {
+    "device": {
+     "id": "dev:3004afbb-4f86-598a-94ec-0cf0fef46c92",
+     "label": "Nikon D850",
+     "make": "Nikon",
+     "model": "D850",
+     "serial": "3018522",
+     "dtc_kind": "camera",
+     "distinguishes": "serial"
+    },
+    "location": {
+     "lat": 43.1102,
+     "lon": 11.8423,
+     "alt": 412.0,
+     "crs": "EPSG:4326",
+     "source": "exif"
+    },
+    "campaign": "Aiano 2015"
+   }
+  },
+  "by": {
+   "operator": {
+    "id": "https://orcid.org/0000-0002-5065-7970"
+   },
+   "at": "2026-09-16T09:00:00Z"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "verifiable",
+  "parents": 0,
+  "declared_origin": true,
+  "preserved": [
+   "how.acquisition.device",
+   "how.acquisition.location"
+  ]
+ }
+}

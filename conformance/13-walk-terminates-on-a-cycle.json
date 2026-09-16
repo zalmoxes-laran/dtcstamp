@@ -1,0 +1,43 @@
+{
+ "case": "two stamps citing each other — the walk must TERMINATE",
+ "why": "A thing that should not exist in reality, which is exactly why it is tested: a walk that spun forever would hang whatever embedded it, and the failure would look like a crash rather than like bad data.",
+ "resolvable": {
+  "sha256:2222222222222222222222222222222222222222222222222222222222222222": {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:b",
+    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "packaging": "file"
+   },
+   "from": [
+    {
+     "resource_id": "res:a",
+     "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    }
+   ]
+  }
+ },
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:a",
+   "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+   "packaging": "file"
+  },
+  "from": [
+   {
+    "resource_id": "res:b",
+    "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+   }
+  ]
+ },
+ "expect": {
+  "walk_rungs": 2,
+  "walk_reached": 1,
+  "walk_unreached": 1,
+  "walk_why": [
+   "already walked"
+  ],
+  "walk_truncated": false
+ }
+}

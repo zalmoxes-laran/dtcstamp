@@ -1,0 +1,19 @@
+{
+ "case": "a bare digest — unknown, and NOT verifiable",
+ "why": "Sixty-four hex characters with no scheme. Calling it verifiable would be GUESSING the algorithm and then asserting it: «it looks like a sha256, so it is one». The third answer exists for exactly this.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:imported",
+   "digest": "6666666666666666666666666666666666666666666666666666666666666666",
+   "packaging": "file"
+  },
+  "from": []
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "unknown",
+  "verifiable": false,
+  "parents": 0
+ }
+}

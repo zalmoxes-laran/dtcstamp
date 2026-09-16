@@ -1,0 +1,28 @@
+{
+ "case": "fields this version does not understand, which MUST survive",
+ "why": "An implementation that drops the unknown destroys provenance on the first round trip, silently. These three are at three different depths on purpose: the top level, inside `self`, and inside `how`.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:future",
+   "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "packaging": "file",
+   "x_colour_profile": "AdobeRGB"
+  },
+  "from": [],
+  "how": {
+   "process_id": "proc:9",
+   "dtc_kind": "transformation",
+   "x_gpu": "M3 Max"
+  },
+  "x_provenance_note": "written by a version that knows something we do not"
+ },
+ "expect": {
+  "valid": true,
+  "preserved": [
+   "x_provenance_note",
+   "self.x_colour_profile",
+   "how.x_gpu"
+  ]
+ }
+}

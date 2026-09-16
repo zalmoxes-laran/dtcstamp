@@ -1,0 +1,38 @@
+{
+ "case": "the empty step, WITH a how that signs it",
+ "why": "`from: []` with a `how` means «born here» — a COMPLETE declaration. In an archaeological project half the assets are origins, and treating the absence of parents as an error turns half the project into noise.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:origin",
+   "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "digest_covers": "artifact",
+   "media_type": "image/jpeg",
+   "packaging": "file",
+   "tier": "master"
+  },
+  "from": [],
+  "how": {
+   "process_id": "acq:5b7e",
+   "dtc_kind": "photo",
+   "acquisition": {
+    "device": "Nikon D850",
+    "lens": "24mm f/1.8",
+    "campaign": "Aiano 2015"
+   }
+  },
+  "by": {
+   "operator": {
+    "id": "https://orcid.org/0000-0002-5065-7970"
+   },
+   "at": "2015-07-12T09:00:00Z"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "verifiable",
+  "verifiable": true,
+  "parents": 0,
+  "declared_origin": true
+ }
+}

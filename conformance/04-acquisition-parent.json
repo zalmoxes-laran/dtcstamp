@@ -1,0 +1,33 @@
+{
+ "case": "a parent that is not a file: kind = acquisition, and no digest",
+ "why": "A campaign of five hundred photographs is a legitimate input and HAS NO BYTES TO HASH. `kind: \"acquisition\"` declares it and the missing `digest` is not a defect. One input edge for a campaign, not five hundred.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:mesh",
+   "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+   "packaging": "file"
+  },
+  "from": [
+   {
+    "resource_id": "acq:5b7e",
+    "kind": "acquisition",
+    "label": "campagna Aiano 2015"
+   }
+  ],
+  "how": {
+   "process_id": "proc:1",
+   "dtc_kind": "photogrammetry"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "verifiable",
+  "parents": 1,
+  "declared_origin": false,
+  "parent_0": {
+   "digest": null,
+   "kind": "acquisition"
+  }
+ }
+}

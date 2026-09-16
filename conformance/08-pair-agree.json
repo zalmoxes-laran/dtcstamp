@@ -1,0 +1,50 @@
+{
+ "case": "two stamps for the same artifact that AGREE",
+ "why": "Same substance, and the labels differ — a `label` is a courtesy for a human, never identity, so it must not produce a disagreement.",
+ "pair": [
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file"
+   },
+   "from": [
+    {
+     "resource_id": "res:p",
+     "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+     "label": "la nuvola"
+    }
+   ],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "transformation",
+    "technique": "decimation"
+   }
+  },
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file"
+   },
+   "from": [
+    {
+     "resource_id": "res:p",
+     "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+     "label": "point cloud"
+    }
+   ],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "transformation",
+    "technique": "decimation"
+   }
+  }
+ ],
+ "expect": {
+  "agree": true,
+  "disagreements": []
+ }
+}

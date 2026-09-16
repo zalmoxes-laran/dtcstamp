@@ -1,0 +1,42 @@
+{
+ "case": "two that differ ONLY in the instant",
+ "why": "The same fact recorded twice. `by.at` is not part of the substance, so these deduplicate instead of disagreeing — otherwise every re-emission of an unchanged step would read as a conflict.",
+ "pair": [
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file"
+   },
+   "from": [],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "photo"
+   },
+   "by": {
+    "at": "2026-03-04T11:20:00Z"
+   }
+  },
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file"
+   },
+   "from": [],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "photo"
+   },
+   "by": {
+    "at": "2026-09-15T20:14:07Z"
+   }
+  }
+ ],
+ "expect": {
+  "agree": true,
+  "disagreements": []
+ }
+}

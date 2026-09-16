@@ -1,0 +1,69 @@
+{
+ "case": "a full, valid stamp",
+ "why": "The shape the format describes, with all six blocks. Everything else in this corpus is a departure from this one, so it is first.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:7f3a2c",
+   "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+   "digest_covers": "artifact",
+   "media_type": "model/gltf+json",
+   "format": "gltf",
+   "packaging": "file",
+   "tier": "distribution",
+   "measures": {
+    "size_bytes": 1234567,
+    "faces": 48210
+   }
+  },
+  "from": [
+   {
+    "resource_id": "res:91c2",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "size_bytes": 84213760,
+    "label": "GT16 · rilievo 2015, nuvola"
+   }
+  ],
+  "how": {
+   "process_id": "proc:d41e",
+   "dtc_kind": "transformation",
+   "technique": "decimation",
+   "parameters": {
+    "target_faces": 50000,
+    "preserve_boundary": true
+   },
+   "software": [
+    {
+     "name": "EM Tools",
+     "version": "1.6.0-dev.8",
+     "commit": "9555447"
+    }
+   ]
+  },
+  "by": {
+   "operator": {
+    "id": "https://orcid.org/0000-0002-5065-7970",
+    "label": "Emanuel Demetrescu"
+   },
+   "at": "2026-09-15T20:14:07Z"
+  },
+  "declared": {
+   "license": "CC-BY-NC",
+   "embargo_until": "2025-12-31",
+   "as_of": "2026-09-15T20:14:07Z"
+  },
+  "registry": {
+   "graph_id": "graph:6af9866e",
+   "label": "Great Temple",
+   "revision": 47,
+   "room": "em.localhost/aiano"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "verifiable",
+  "verifiable": true,
+  "parents": 1,
+  "declared_origin": false
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "case": "two stamps that CONTRADICT each other in substance",
+ "why": "Different parents and a different technique for the same output digest. **Not an error: a discovery**, and it is made to surface. Nothing here chooses a winner — choosing is a decision somebody makes with a reason, and a library that picked one quietly would hide that decision.",
+ "pair": [
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file"
+   },
+   "from": [
+    {
+     "resource_id": "res:p",
+     "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    }
+   ],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "transformation",
+    "technique": "decimation"
+   }
+  },
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file"
+   },
+   "from": [
+    {
+     "resource_id": "res:q",
+     "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+   ],
+   "how": {
+    "process_id": "proc:8",
+    "dtc_kind": "transformation",
+    "technique": "remeshing"
+   }
+  }
+ ],
+ "expect": {
+  "agree": false,
+  "disagreements": [
+   "from",
+   "how.process_id",
+   "how.technique"
+  ]
+ }
+}
