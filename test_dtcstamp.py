@@ -15,6 +15,7 @@ carrying the trust of whoever reads it.
 import inspect
 import json
 import pathlib
+import sys
 import tempfile
 import unittest
 
@@ -240,39 +241,58 @@ class TheWalkKnowsNothingAboutWhereThingsAre(unittest.TestCase):
 # ZERO DEPENDENCIES — measured, not asserted
 # ═════════════════════════════════════════════════════════════════════════════
 
+#: `sys.stdlib_module_names` arrived in Python 3.10, and below it there is no
+#: exact substitute: a hand-written list of standard modules would be wrong the
+#: day Python moves one, which is the opposite of what this check is for.
+#:
+#: So the two tests below SKIP under 3.9 — and that is only defensible because
+#: THE RELEASE DOES NOT RIDE ON A RUN WHERE THEY SKIPPED: `publish.yml` gates on
+#: a job that runs them on a modern interpreter. A skip without that gate would
+#: turn the loudest guard in this package into a silent one, which is worse than
+#: the failure it replaces.
+#:
+#: They carry the SAME guard, on purpose. The failure that produced this comment
+#: was precisely the two of them disagreeing — the check refusing to run, its
+#: counterexample running on and crashing. A counterexample that can outlive the
+#: assertion it defends is not defending anything.
+_EXACT_STDLIB = hasattr(sys, "stdlib_module_names")
+_NEEDS_310 = "needs Python 3.10+ (sys.stdlib_module_names) to be exact"
+
+
+def _toplevel_imports(source):
+    """The top-level module names a piece of Python imports, read from its AST.
+
+    Shared by the check and its counterexample so the two cannot drift: a
+    counterexample that scans differently from the assertion proves nothing
+    about the assertion.
+    """
+    import ast
+
+    modules = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            modules.update(a.name.split(".")[0] for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            modules.add((node.module or "").split(".")[0])
+    modules.discard("")
+    return modules
+
+
 class ZeroDependencies(unittest.TestCase):
 
+    @unittest.skipUnless(_EXACT_STDLIB, _NEEDS_310)
     def test_every_import_is_standard_library(self):
-        import ast
-        import sys
-
-        source = (HERE / "dtcstamp.py").read_text(encoding="utf-8")
-        modules = set()
-        for node in ast.walk(ast.parse(source)):
-            if isinstance(node, ast.Import):
-                modules.update(a.name.split(".")[0] for a in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.level == 0:
-                modules.add((node.module or "").split(".")[0])
-        modules.discard("")
         # `sys.stdlib_module_names` is the interpreter's own answer, which beats
-        # any list written here: a list would age the day Python moves a module.
-        stdlib = getattr(sys, "stdlib_module_names", None)
-        self.assertIsNotNone(stdlib, "this check needs Python 3.10+ to be exact")
-        outside = sorted(m for m in modules if m not in stdlib)
+        # any list written here.
+        modules = _toplevel_imports(
+            (HERE / "dtcstamp.py").read_text(encoding="utf-8"))
+        outside = sorted(m for m in modules if m not in sys.stdlib_module_names)
         self.assertEqual(outside, [], f"third-party imports: {outside}")
 
+    @unittest.skipUnless(_EXACT_STDLIB, _NEEDS_310)
     def test_THE_COUNTEREXAMPLE_a_third_party_import_would_be_seen(self):
-        import ast
-        import sys
-
         bad = "import json\nimport numpy as np\nfrom pandas import DataFrame\n"
-        modules = set()
-        for node in ast.walk(ast.parse(bad)):
-            if isinstance(node, ast.Import):
-                modules.update(a.name.split(".")[0] for a in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.level == 0:
-                modules.add((node.module or "").split(".")[0])
-        outside = sorted(m for m in modules
+        outside = sorted(m for m in _toplevel_imports(bad)
                          if m not in sys.stdlib_module_names)
         self.assertEqual(outside, ["numpy", "pandas"])
 

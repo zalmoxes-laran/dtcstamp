@@ -6,6 +6,16 @@ name: Publish to PyPI
 # Stessa forma del workflow di s3Dgraphy, di proposito: due pacchetti che si
 # rilasciano in due modi diversi diventano due procedure da ricordare, e quella
 # usata meno spesso è quella che si sbaglia.
+#
+# DUE DOMANDE DIVERSE, DUE LAVORI DIVERSI, e tenerle separate è il punto:
+#   · «gira sulla versione più vecchia che il pacchetto promette?» — si risponde
+#     solo su 3.9, ed è ciò che `requires-python = ">=3.9"` afferma;
+#   · «ha davvero zero dipendenze?» — si risponde in modo ESATTO solo da 3.10 in
+#     su, perché `sys.stdlib_module_names` non esiste prima.
+# Farle girare tutte e due sullo stesso interprete significa che una delle due
+# non viene posta. Prima di questo file giravano entrambe su 3.9, e la seconda
+# non falliva per un difetto del pacchetto: falliva perché lì non poteva essere
+# posta.
 
 on:
   workflow_dispatch:
@@ -24,7 +34,55 @@ on:
         type: string
 
 jobs:
+
+  # LA SUITE SU OGNI VERSIONE CHE IL PACCHETTO PROMETTE. `requires-python` è una
+  # riga in un file finché nessuno la mette alla prova; qui diventa una misura.
+  suite:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.version_tag }}
+    - uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install pytest, and NOTHING else
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest
+    - name: Run the suite against a bare interpreter
+      run: python -m pytest -q -rs
+
+  # LA PROMESSA DEL PACCHETTO, VERIFICATA DOVE LA DOMANDA HA UNA RISPOSTA ESATTA.
+  # Sotto 3.10 quei due test si saltano — e il salto è accettabile SOLO perché il
+  # rilascio dipende da QUESTO lavoro, dove non possono saltare. La prima riga lo
+  # rende impossibile da dimenticare: se un domani qualcuno abbassa la versione
+  # qui, il lavoro si ferma invece di diventare verde a vuoto.
+  zero-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.version_tag }}
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    - name: This job must RUN the exact check, never skip it
+      run: |
+        python -c "import sys; assert hasattr(sys, 'stdlib_module_names'), \
+          'this job exists to run the exact zero-dependency check: it needs 3.10+'"
+    - name: Measure the dependencies from the interpreter itself
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest
+        python -m pytest -q -rs -k ZeroDependencies
+
   manual-publish:
+    needs: [suite, zero-dependencies]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
@@ -37,26 +95,17 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.12'
 
     - name: Confirm target
       run: |
-        echo "🎯 Publishing to: ${{ github.event.inputs.target }}"
-        echo "🏷️ Using tag: ${{ github.event.inputs.version_tag }}"
+        echo "Publishing to: ${{ github.event.inputs.target }}"
+        echo "Using tag: ${{ github.event.inputs.version_tag }}"
 
     - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
         pip install build twine wheel
-
-    # LA PROMESSA DI QUESTO PACCHETTO È «zero dipendenze», e una promessa che
-    # nessuno verifica al momento del rilascio è una promessa che prima o poi
-    # non è più vera. La suite la misura dall'interprete stesso, quindi gira
-    # QUI, prima della build, e senza installare niente oltre a pytest.
-    - name: Run the suite against a bare interpreter
-      run: |
-        pip install pytest
-        python -m pytest -q
 
     - name: Build package
       run: |
@@ -66,10 +115,12 @@ jobs:
       run: |
         python -m twine check dist/*
 
-    # IL TAG DEVE COINCIDERE CON LA VERSIONE COSTRUITA. Senza questo controllo
-    # si può pubblicare `v0.2.0` contenente 0.1.0, e su PyPI non si corregge:
-    # si può solo pubblicare un'altra versione sopra.
+    # IL TAG DEVE COINCIDERE CON LA VERSIONE COSTRUITA. Senza questo controllo si
+    # può pubblicare `v0.2.0` contenente 0.1.0, e su PyPI non si corregge: si può
+    # solo pubblicare un'altra versione sopra.
     - name: The tag must match the version in the artefact
+      env:
+        VERSION_TAG: ${{ github.event.inputs.version_tag }}
       run: |
         python - <<'PY'
         import os, pathlib, re, sys
@@ -77,14 +128,11 @@ jobs:
         built = sorted(p.name for p in pathlib.Path("dist").glob("*.whl"))
         if not built:
             sys.exit("no wheel in dist/")
-        # dtcstamp-0.1.0-py3-none-any.whl -> 0.1.0
         version = re.match(r"[^-]+-([^-]+)-", built[0]).group(1)
         print(f"tag={tag!r} wheel={version!r} ({built[0]})")
         if tag != version:
             sys.exit(f"REFUSING: tag {tag!r} does not match built version {version!r}")
         PY
-      env:
-        VERSION_TAG: ${{ github.event.inputs.version_tag }}
 
     - name: Publish to TestPyPI
       if: github.event.inputs.target == 'testpypi'
