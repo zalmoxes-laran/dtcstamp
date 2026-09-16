@@ -44,10 +44,10 @@ jobs:
       matrix:
         python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         ref: ${{ github.event.inputs.version_tag }}
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install pytest, and NOTHING else
@@ -65,10 +65,10 @@ jobs:
   zero-dependencies:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         ref: ${{ github.event.inputs.version_tag }}
-    - uses: actions/setup-python@v4
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.12'
     - name: This job must RUN the exact check, never skip it
@@ -88,12 +88,12 @@ jobs:
 
     steps:
     - name: Checkout specific tag
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.event.inputs.version_tag }}
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: '3.12'
 

@@ -4,3 +4,6 @@ build/
 dist/
 *.egg-info/
 .venv/
+
+# bump_and_push.sh usa `sed -i.bak`: se muore a meta, i .bak restano
+*.bak
