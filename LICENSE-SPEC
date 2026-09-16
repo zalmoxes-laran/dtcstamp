@@ -1,0 +1,28 @@
+The FORMAT SPECIFICATION — `stamp-format.md` and the example stamps under
+`conformance/` — is licensed under the
+
+    Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+    Human-readable summary: https://creativecommons.org/licenses/by/4.0/
+    Legal code:             https://creativecommons.org/licenses/by/4.0/legalcode
+
+Copyright 2026 Consiglio Nazionale delle Ricerche — Istituto di Scienze del
+Patrimonio Culturale (CNR-ISPC).
+
+WHY TWO LICENCES, AND WHERE THE LINE FALLS
+
+The CODE in this repository — `dtcstamp.py`, `test_dtcstamp.py` and the
+packaging around them — is under the Apache License 2.0; see LICENSE.
+
+The SPECIFICATION is a document, not software, and it is meant to be quoted,
+translated, republished in a paper and re-implemented in another language by
+people who owe us nothing but the attribution. CC BY 4.0 says exactly that and
+is the licence research infrastructures already recognise.
+
+Apache-2.0 on the code is deliberate too: it is permissive enough that a
+closed-source tool can vendor the module — which is the whole adoption
+strategy — and it carries an explicit patent grant, which a bare MIT does not.
+
+A note for anyone combining this with s3Dgraphy, which is GPL-3.0-or-later:
+Apache-2.0 is one-way compatible with GPLv3, so GPLv3 software may depend on
+this module. The reverse does not hold.

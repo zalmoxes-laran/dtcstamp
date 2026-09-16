@@ -12,6 +12,10 @@ version = "0.1.0"
 description = "Read, write, compare and walk DTC stamps — the immutable record of one step of a chain"
 readme = "README.md"
 requires-python = ">=3.9"
+# APACHE-2.0 sul CODICE e CC-BY-4.0 sulla SPECIFICA: due licenze perché sono
+# due cose. Il perché sta in LICENSE-SPEC, insieme alla nota di compatibilità
+# con s3Dgraphy, che è GPL-3.0-or-later.
+license = {text = "Apache-2.0"}
 authors = [
     {name = "Emanuel Demetrescu", email = "emanuel.demetrescu@cnr.it"},
 ]
@@ -19,6 +23,7 @@ keywords = ["provenance", "digest", "archaeology", "heritage", "extended-matrix"
             "crmdig", "prov-o"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Programming Language :: Python :: 3",
@@ -37,5 +42,29 @@ dependencies = []
 # ONE MODULE, not a package directory: the promise is «copy a file», and a
 # directory would break it silently — the tests would still pass and somebody's
 # Blender add-on would fail at import.
+[project.urls]
+Homepage = "https://github.com/zalmoxes-laran/dtcstamp"
+Repository = "https://github.com/zalmoxes-laran/dtcstamp.git"
+"Bug Reports" = "https://github.com/zalmoxes-laran/dtcstamp/issues"
+"Source Code" = "https://github.com/zalmoxes-laran/dtcstamp"
+Specification = "https://github.com/zalmoxes-laran/dtcstamp/blob/main/stamp-format.md"
+Changelog = "https://github.com/zalmoxes-laran/dtcstamp/blob/main/CHANGELOG.md"
+"Extended Matrix" = "https://www.extendedmatrix.org"
+
+# ─────────────────────────────────────────────────────────────────────────
+# UN SOLO EXTRA, ed è deliberato. s3Dgraphy ne ha dieci perché ha dieci
+# funzioni opzionali; qui ogni extra in più sarebbe una smentita di
+# `dependencies = []` scritta due righe sopra. `dev` è tooling di rilascio e
+# di prova, non una funzione del pacchetto: non lo installa nessuno che usi
+# la libreria.
+# ─────────────────────────────────────────────────────────────────────────
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "build",
+    "twine",
+    "bump2version",
+]
+
 [tool.setuptools]
 py-modules = ["dtcstamp"]

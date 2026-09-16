@@ -127,14 +127,47 @@ written. A test asserts that last part.
 propagated from one place, and it is unrelated to the *Heritage Digital Twin*
 (HDT-O, ECHOES D7.1), which is a real and different thing.
 
-## The licence is not decided
+## Two licences, because there are two things
 
-There is deliberately no `LICENSE` file yet, and that is a flag rather than an
-oversight. The whole purpose of this library is that somebody vendors it into a
-Blender add-on or a Metashape script by copying one file — and which licence
-permits that, and on what terms for them, is a decision for the author to make
-rather than something a repository should acquire by default. Until it is made,
-this is unpublished work.
+The **code** — `dtcstamp.py`, its suite and the packaging — is under the
+**Apache License 2.0** (`LICENSE`). Permissive enough that a closed-source tool
+can vendor the module, which is the whole adoption strategy, and it carries an
+explicit patent grant that a bare MIT does not.
+
+The **specification** — `stamp-format.md` and the example stamps under
+`conformance/` — is under **CC BY 4.0** (`LICENSE-SPEC`). It is a document, not
+software, and it is meant to be quoted, translated, republished in a paper and
+re-implemented in another language by people who owe us nothing but the
+attribution.
+
+Copyright 2026 Consiglio Nazionale delle Ricerche — Istituto di Scienze del
+Patrimonio Culturale (CNR-ISPC).
+
+A note for anyone combining this with s3Dgraphy, which is GPL-3.0-or-later:
+Apache-2.0 is one-way compatible with GPLv3, so GPLv3 software may depend on
+this module. The reverse does not hold.
+
+## Releasing
+
+Same procedure as s3Dgraphy, deliberately — two packages released two different
+ways become two procedures to remember, and the one used less often is the one
+that gets it wrong.
+
+```sh
+./bump_and_push.sh patch          # or minor / major
+./bump_and_push.sh --set 0.2.0rc1 # PEP 440 pre-releases
+./bump_and_push.sh --tag-only     # version already edited by hand
+```
+
+Then GitHub → Actions → **Publish to PyPI** → Run workflow, with `target:
+testpypi` first and the tag the script just pushed. The workflow runs the suite
+against a bare interpreter before building — the «zero dependencies» promise is
+checked at the moment of release, not asserted — and refuses to publish if the
+tag does not match the version inside the built wheel.
+
+`STAMP_VERSION` and `HINTS_VERSION` are **not** the package version: they are
+the on-disk format versions, and they move only when a file written by an older
+reader stops being readable.
 
 ## Who uses it
 

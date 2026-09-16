@@ -1,0 +1,101 @@
+name: Publish to PyPI
+
+# Pubblicazione SOLO manuale: Actions > "Publish to PyPI" > Run workflow.
+# (Nessun trigger automatico su release: il publish su PyPI lo si fa a mano.)
+#
+# Stessa forma del workflow di s3Dgraphy, di proposito: due pacchetti che si
+# rilasciano in due modi diversi diventano due procedure da ricordare, e quella
+# usata meno spesso è quella che si sbaglia.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Where to publish'
+        required: true
+        default: 'testpypi'
+        type: choice
+        options:
+        - testpypi
+        - pypi
+      version_tag:
+        description: 'Git tag to publish (e.g., v0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  manual-publish:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout specific tag
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.version_tag }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Confirm target
+      run: |
+        echo "🎯 Publishing to: ${{ github.event.inputs.target }}"
+        echo "🏷️ Using tag: ${{ github.event.inputs.version_tag }}"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine wheel
+
+    # LA PROMESSA DI QUESTO PACCHETTO È «zero dipendenze», e una promessa che
+    # nessuno verifica al momento del rilascio è una promessa che prima o poi
+    # non è più vera. La suite la misura dall'interprete stesso, quindi gira
+    # QUI, prima della build, e senza installare niente oltre a pytest.
+    - name: Run the suite against a bare interpreter
+      run: |
+        pip install pytest
+        python -m pytest -q
+
+    - name: Build package
+      run: |
+        python -m build
+
+    - name: Check package
+      run: |
+        python -m twine check dist/*
+
+    # IL TAG DEVE COINCIDERE CON LA VERSIONE COSTRUITA. Senza questo controllo
+    # si può pubblicare `v0.2.0` contenente 0.1.0, e su PyPI non si corregge:
+    # si può solo pubblicare un'altra versione sopra.
+    - name: The tag must match the version in the artefact
+      run: |
+        python - <<'PY'
+        import os, pathlib, re, sys
+        tag = os.environ["VERSION_TAG"].lstrip("v")
+        built = sorted(p.name for p in pathlib.Path("dist").glob("*.whl"))
+        if not built:
+            sys.exit("no wheel in dist/")
+        # dtcstamp-0.1.0-py3-none-any.whl -> 0.1.0
+        version = re.match(r"[^-]+-([^-]+)-", built[0]).group(1)
+        print(f"tag={tag!r} wheel={version!r} ({built[0]})")
+        if tag != version:
+            sys.exit(f"REFUSING: tag {tag!r} does not match built version {version!r}")
+        PY
+      env:
+        VERSION_TAG: ${{ github.event.inputs.version_tag }}
+
+    - name: Publish to TestPyPI
+      if: github.event.inputs.target == 'testpypi'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: https://test.pypi.org/legacy/
+        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        skip-existing: true
+
+    - name: Publish to PyPI (PRODUCTION)
+      if: github.event.inputs.target == 'pypi'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}

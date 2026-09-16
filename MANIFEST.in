@@ -1,0 +1,24 @@
+include README.md
+include LICENSE
+include LICENSE-SPEC
+include CHANGELOG.md
+
+# The SPECIFICATION travels with the code. A stamp library whose sdist does
+# not carry the format it implements leaves an implementer with the behaviour
+# and without the contract.
+include stamp-format.md
+
+# The CONFORMANCE CORPUS travels too, and that is the point of it: a second
+# implementation (the JavaScript port, or somebody else's) needs the cases and
+# their expected outcome, not just the Python that happens to pass them.
+recursive-include conformance *.json
+
+exclude .bumpversion.cfg
+exclude bump_and_push.sh
+exclude bump_and_push.bat
+prune .github
+
+# La SUITE viaggia: le promesse di questo pacchetto — zero dipendenze, campi
+# sconosciuti conservati — sono misurate da quel file, e una promessa che il
+# destinatario non puo verificare da solo e una dichiarazione.
+include test_dtcstamp.py
