@@ -93,6 +93,13 @@ class Corpus(unittest.TestCase):
             parent = (validated.get("from") or [])[0]
             for key, value in expect["parent_0"].items():
                 self.assertEqual(parent.get(key), value)
+        if "title" in expect:
+            self.assertEqual(S.stamp_title(validated), expect["title"])
+        if "description" in expect:
+            self.assertEqual(S.stamp_description(validated),
+                             expect["description"])
+        if "receipt" in expect:
+            self.assertEqual(S.receipt(validated), expect["receipt"])
         for path in expect.get("preserved", []):
             # THE ROUND TRIP, not just the read: an implementation that keeps a
             # field on read and drops it on write loses it just the same.
@@ -473,6 +480,40 @@ class TheFormat(unittest.TestCase):
         # …and a step WITH parents is not an origin however it is signed
         withparents = dict(signed, **{"from": [{"resource_id": "p"}]})
         self.assertFalse(S.declared_origin(withparents))
+
+
+class TitleAndDescription(unittest.TestCase):
+    """`self.label` and `self.description` (04-10-2026): optional, a courtesy."""
+
+    def test_a_long_description_is_kept_whole_and_never_refused(self):
+        text = "x" * (S.DESCRIPTION_HINT_CHARS * 3)
+        stamp = {"stamp": 1, "self": {"resource_id": "r", "description": text}}
+        S.validate_stamp(stamp)
+        self.assertEqual(S.stamp_description(stamp), text)
+
+    def test_what_is_not_text_is_not_a_title(self):
+        stamp = {"stamp": 1, "self": {"resource_id": "r", "label": 42,
+                                      "description": ["a"]}}
+        S.validate_stamp(stamp)          # still a stamp
+        self.assertIsNone(S.stamp_title(stamp))
+        self.assertIsNone(S.stamp_description(stamp))
+        self.assertNotIn("title", S.receipt(stamp))
+
+    def test_a_label_repeating_a_prefixed_id_is_no_title(self):
+        stamp = {"stamp": 1, "self": {"resource_id": "https://x.org/res/abc",
+                                      "label": "abc"}}
+        self.assertIsNone(S.stamp_title(stamp))
+
+    def test_the_receipt_refuses_what_is_not_a_stamp(self):
+        with self.assertRaises(S.BadStamp):
+            S.receipt({"self": {"resource_id": "r"}})
+
+    def test_the_title_is_not_substance(self):
+        a = {"stamp": 1, "self": {"resource_id": "r", "label": "uno",
+                                  "description": "a"}}
+        b = {"stamp": 1, "self": {"resource_id": "r", "label": "due"}}
+        self.assertEqual(S.substance(a), S.substance(b))
+        self.assertTrue(S.stamps_agree(a, b))
 
 
 # ═════════════════════════════════════════════════════════════════════════════

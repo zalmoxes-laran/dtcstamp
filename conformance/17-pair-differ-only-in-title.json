@@ -1,0 +1,39 @@
+{
+ "case": "two that differ ONLY in the title and the description",
+ "why": "A title is a courtesy for a human, like `from[].label`: two people naming the same bytes differently have not contradicted each other about where they came from. Not part of the substance, so these agree.",
+ "pair": [
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file",
+    "label": "Fronte nord",
+    "description": "Scattata da terra."
+   },
+   "from": [],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "photo"
+   }
+  },
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "packaging": "file",
+    "label": "North face, from the ground"
+   },
+   "from": [],
+   "how": {
+    "process_id": "proc:7",
+    "dtc_kind": "photo"
+   }
+  }
+ ],
+ "expect": {
+  "agree": true,
+  "disagreements": []
+ }
+}

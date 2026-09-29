@@ -1,0 +1,29 @@
+{
+ "case": "no title, or a title that repeats the id: still valid, and the receipt says nothing",
+ "why": "A stamp without a description stays valid — the field is optional and the version does not change. A label that only repeats the id is not a label (the rule of every label in the format), so it is not shown as a title.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:91c2",
+   "digest": "sha256:aa17b30000000000000000000000000000000000000000000000000000000000",
+   "packaging": "file",
+   "label": "91c2"
+  },
+  "from": [],
+  "how": {
+   "process_id": "proc:1",
+   "dtc_kind": "photo"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "title": null,
+  "description": null,
+  "receipt": {
+   "id": "res:91c2",
+   "checksum": "sha256:aa17b30000000000000000000000000000000000000000000000000000000000",
+   "stamp": 1,
+   "parents": []
+  }
+ }
+}

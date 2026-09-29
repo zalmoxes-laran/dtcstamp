@@ -1,4 +1,4 @@
-# Il timbro — formato deciso (14-09-2026)
+# Il timbro — formato deciso (14-09-2026, revisione 04-10-2026)
 
 > **Nota sulla lingua.** Questa specifica è in italiano perché è nata così, e
 > muoverla di repo non è il momento di riscriverla: una traduzione fatta di
@@ -69,7 +69,9 @@ differiscono solo nell'istante sono lo stesso fatto registrato due volte, e si d
     "format": "gltf",
     "packaging": "file",
     "tier": "distribution",
-    "measures": { "size_bytes": 1234567, "faces": 48210 }
+    "measures": { "size_bytes": 1234567, "faces": 48210 },
+    "label": "Great Temple · modello per il web",
+    "description": "Decimato a 50 000 facce dal rilievo 2015, per la pubblicazione."
   },
   "from": [
     { "resource_id": "res:91c2…", "digest": "sha256:aa17b3…",
@@ -117,6 +119,25 @@ differiscono solo nell'istante sono lo stesso fatto registrato due volte, e si d
 `digest_covers` dichiara cosa il digest copre — `artifact` (i byte come usciti dal processo) o `payload` (il
 contenuto al netto del timbro, quando il timbro vive dentro il vascello). Stessa disciplina del `checksum_of`
 del tileset: il digest **dice** cosa copre invece di lasciarlo intuire.
+
+**`self.label` e `self.description` sono il titolo e la descrizione** (04-10-2026, decisione di E.D. del
+29-09), entrambi **facoltativi**: un timbro senza resta valido com'era, e la versione del formato non cambia.
+Servivano perché la ricevuta che lo shelf tiene per un file timbrato mostra titolo e descrizione, e il timbro
+non li aveva — misurato: chi lo mostra ricadeva sul nome del file o sul `resource_id` (EMStudio,
+`views/stamps.ts`), e il riassorbimento chiamava l'uscita col suo id. Il titolo si chiama **`label`**, la
+parola che `from` usa già: così un figlio copia la `self.label` del genitore nella sua `from[].label` senza
+tradurla. Stanno in `self` perché parlano dell'artefatto, non del passo. E valgono le regole di ogni
+etichetta: **cortesia per un umano, mai identità** — due timbri che chiamano gli stessi byte in due modi non
+si contraddicono sulla loro provenienza, quindi nessuno dei due entra nella sostanza del confronto — e una
+`label` che ripete l'id va omessa. La descrizione è **breve** (una riga o due, ~280 caratteri): la
+documentazione dell'artefatto è del grafo. Chi mostra può accorciarla; nessuno la rifiuta, perché rifiutare
+perderebbe un verbale.
+
+**La ricevuta** (`receipt`) è ciò che uno shelf tiene di un file timbrato: `id` (`self.resource_id`),
+`checksum` (`self.digest`, con la parola dello shelf), `stamp` (la versione del formato in cui il verbale è
+scritto), `parents` (i `from` **per identità**: `resource_id`, e `digest`/`kind` quando ci sono — mai
+l'etichetta, che è cortesia del genitore), e `title`/`description` **in copia**. Copia e non riferimento: la
+ricevuta sopravvive al file accanto, e il timbro, essendo immutabile, non può divergere da lei.
 
 `from` **non porta mai un percorso**. Nominare e non aprire è la regola che ferma la ricorsione: è
 tutta lì la differenza fra il passo e la catena. La `label` è cortesia per un umano, non identità.
@@ -353,6 +374,11 @@ provenienza non ci entra.
 va il puntino sulla mappa» — scriverci dentro dove è stata scattata una foto sovrascriverebbe lo shift del
 grafo con una coordinata di campo. Il tipo per «dove è avvenuto un passo» non esiste, e non è stato inventato:
 i valori viaggiano e tornano sull'evento. Decisione di E.D.
+
+**Aggiunto il 04-10-2026**: `self.label` (il titolo) e `self.description`, facoltativi e fuori dalla
+sostanza, con `stamp_title`, `stamp_description` e `receipt` nella libreria e tre casi nella conformance
+(15–17). Dal lato s3Dgraphy **resta da fare**: l'emissione deve scriverli dal `name`/`description` della
+risorsa (omettendo un nome che ripete l'id) e il riassorbimento leggerli al posto del `resource_id`.
 
 ## Dove vive questo formato
 

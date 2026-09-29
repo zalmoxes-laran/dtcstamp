@@ -34,6 +34,8 @@ Every file is one JSON object. Three kinds, told apart by which key they carry:
 | `parents` | how many entries in `from` |
 | `declared_origin` | whether `from: []` means «born here» (a `how` signs it) rather than «I do not know how» |
 | `parent_0` | fields of the first parent that must read exactly so |
+| `title` / `description` | what `stamp_title` / `stamp_description` read (`null` when the stamp has none worth showing) |
+| `receipt` | the exact receipt a shelf keeps: `{id, checksum, stamp, parents, title?, description?}` |
 | `preserved` | dotted paths of fields this version does not understand and **must not drop** |
 | `agree` / `disagreements` | for a `pair`: whether they say the same thing, and the sorted paths where they do not |
 | `walk_rungs` / `walk_reached` / `walk_unreached` | how far the ascent got |

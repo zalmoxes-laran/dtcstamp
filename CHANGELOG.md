@@ -11,6 +11,20 @@ not changed the format.
 
 ## [Unreleased]
 
+### Added — the title and the description (spec revision 04-10-2026)
+- `self.label` (the title) and `self.description`, both optional: a stamp
+  without them is as valid as before and `STAMP_VERSION` stays 1. The title is
+  spelled `label`, the word `from[]` already uses, so a child copies its
+  parent's `self.label` into `from[].label`. Both a courtesy, never identity:
+  neither is part of `substance`, so two stamps that differ only there agree.
+- `stamp_title(stamp)` (None for a label that only repeats the id),
+  `stamp_description(stamp)`, `DESCRIPTION_HINT_CHARS` (advice, never a
+  refusal).
+- `receipt(stamp)` — what a shelf keeps for a stamped file:
+  `{id, checksum, stamp, parents, title?, description?}`, parents by identity
+  only, title and description as a copy.
+- Conformance 15–17 and the runner keys `title`, `description`, `receipt`.
+
 ## [0.1.0] — 2026-09-16
 
 First public release. Extracted from s3Dgraphy so that a Blender add-on, a

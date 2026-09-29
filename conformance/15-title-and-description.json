@@ -1,0 +1,58 @@
+{
+ "case": "a title and a description in `self`, copied into the receipt",
+ "why": "The shelf shows a title and a description for a stamped file, and before 04-10-2026 the stamp had neither: every reader fell back to the id or the file name. Both optional, both a courtesy. The receipt copies them beside the identity, and names the parents by identity only.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:7f3a2c",
+   "digest": "sha256:6e4a5f0000000000000000000000000000000000000000000000000000000000",
+   "packaging": "file",
+   "label": "Great Temple · modello per il web",
+   "description": "Decimato a 50 000 facce dal rilievo 2015, per la pubblicazione."
+  },
+  "from": [
+   {
+    "resource_id": "res:91c2",
+    "digest": "sha256:aa17b30000000000000000000000000000000000000000000000000000000000",
+    "size_bytes": 84213760,
+    "label": "GT16 · rilievo 2015, nuvola"
+   },
+   {
+    "resource_id": "acq:5b7e",
+    "kind": "acquisition",
+    "label": "campagna Aiano 2015"
+   }
+  ],
+  "how": {
+   "process_id": "proc:d41e",
+   "dtc_kind": "transformation",
+   "technique": "decimation"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "title": "Great Temple · modello per il web",
+  "description": "Decimato a 50 000 facce dal rilievo 2015, per la pubblicazione.",
+  "receipt": {
+   "id": "res:7f3a2c",
+   "checksum": "sha256:6e4a5f0000000000000000000000000000000000000000000000000000000000",
+   "stamp": 1,
+   "parents": [
+    {
+     "resource_id": "res:91c2",
+     "digest": "sha256:aa17b30000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+     "resource_id": "acq:5b7e",
+     "kind": "acquisition"
+    }
+   ],
+   "title": "Great Temple · modello per il web",
+   "description": "Decimato a 50 000 facce dal rilievo 2015, per la pubblicazione."
+  },
+  "preserved": [
+   "self.label",
+   "self.description"
+  ]
+ }
+}

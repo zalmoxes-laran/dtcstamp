@@ -277,6 +277,91 @@ def declared_origin(stamp: Dict[str, Any]) -> bool:
     return bool(stamp.get("how"))
 
 
+# ── the title and the description — a courtesy, like every label ─────────────
+#
+# Added 04-10-2026 (E.D., 29-09): the receipt a shelf keeps for a stamped file
+# shows a title and a description, and the stamp had neither — every reader
+# fell back to the resource id or the file name. Both OPTIONAL, both in `self`
+# (they are about the artifact), and both a courtesy for a human, never
+# identity: two stamps that name the same bytes differently have not
+# contradicted each other about where the bytes came from, so neither is part
+# of :func:`substance`. The title is spelled `label`, the word `from[]` already
+# uses, so a child copies its parent's `self.label` into its own `from[].label`
+# without translating it. A stamp without them is exactly as valid as before.
+
+#: A description is SHORT: a line or two for a list or a receipt, not the
+#: documentation of the artifact (that is the graph's). A reader may shorten a
+#: longer one for display; none refuses it — refusing would lose a record.
+DESCRIPTION_HINT_CHARS = 280
+
+
+def _own_text(value: Any, resource_id: str) -> Optional[str]:
+    """A label worth showing: a non-empty string that does not merely repeat
+    the id (the rule of every label in the format)."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    rid = str(resource_id or "")
+    tail = rid.rsplit(":", 1)[-1].rsplit("/", 1)[-1]
+    if text in (rid, tail):
+        return None
+    return text
+
+
+def stamp_title(stamp: Dict[str, Any]) -> Optional[str]:
+    """``self.label``, when it says something the id does not; else None."""
+    itself = stamp.get("self") or {}
+    return _own_text(itself.get("label"), itself.get("resource_id"))
+
+
+def stamp_description(stamp: Dict[str, Any]) -> Optional[str]:
+    """``self.description``, when there is one; else None. Never shortened here:
+    :data:`DESCRIPTION_HINT_CHARS` is advice for writers and displays."""
+    value = (stamp.get("self") or {}).get("description")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()
+
+
+def receipt(stamp: Dict[str, Any]) -> Dict[str, Any]:
+    """What a shelf keeps for a stamped file: the stamp's identity and the
+    words a person reads, **as a copy**.
+
+    ``{id, checksum, stamp, parents, title, description}``: ``id`` is
+    ``self.resource_id``; ``checksum`` is ``self.digest`` (the shelf's word for
+    it); ``stamp`` is the format version the record was written in; ``parents``
+    lists ``from`` by identity only (``resource_id``, and ``digest`` / ``kind``
+    when present — never the label, which is the parent's own courtesy);
+    ``title`` / ``description`` are copied from ``self`` and absent when the
+    stamp has none. A copy and not a reference: the receipt outlives the file
+    beside it, and the stamp — being immutable — cannot drift from it.
+    """
+    validate_stamp(stamp)
+    itself = stamp.get("self") or {}
+    out: Dict[str, Any] = {"id": str(itself.get("resource_id"))}
+    if itself.get("digest"):
+        out["checksum"] = str(itself["digest"])
+    out["stamp"] = stamp.get("stamp")
+    parents = []
+    for parent in stamp.get("from") or []:
+        if not isinstance(parent, dict):
+            continue
+        entry = {k: parent[k] for k in ("resource_id", "digest", "kind")
+                 if parent.get(k)}
+        if entry:
+            parents.append(entry)
+    out["parents"] = parents
+    title = stamp_title(stamp)
+    if title:
+        out["title"] = title
+    description = stamp_description(stamp)
+    if description:
+        out["description"] = description
+    return out
+
+
 # ── the filesystem, kept to three functions on purpose ───────────────────────
 #
 # Everything above is pure: given a dictionary it answers. These three are the
@@ -378,6 +463,8 @@ def substance(stamp: Dict[str, Any]) -> Dict[str, Any]:
     out["self.packaging"] = itself.get("packaging")
     out["self.tier"] = itself.get("tier")
     out["self.measures"] = itself.get("measures")
+    # NOT `self.label` nor `self.description`: a title is a courtesy, and two
+    # people naming the same bytes differently have not disagreed about them.
 
     # The parents by identity, never by label: a `label` is a courtesy.
     parents = stamp.get("from")
@@ -841,15 +928,16 @@ def _this_machine() -> Optional[str]:
 
 __all__ = [
     "ALREADY_WALKED", "BadStamp", "CEILING", "COMPARABLE", "COMPARABLE_SCHEMES",
-    "Disagreement", "HINTS_SUFFIX", "HINTS_VERSION", "KNOWN_KINDS", "NOT_A_FILE",
+    "DESCRIPTION_HINT_CHARS", "Disagreement", "HINTS_SUFFIX", "HINTS_VERSION", "KNOWN_KINDS", "NOT_A_FILE",
     "NOT_RESOLVED", "PACKAGE", "Resolver", "Rung", "SCOPES", "STAMP_SUFFIX",
     "STAMP_VERSION", "UNKNOWN", "UNREADABLE", "VERIFIABLE", "VERIFIABLE_SCHEMES",
     "Walk", "__version__", "clean_stamp", "compare_stamps", "declared_origin",
     "describe_identity", "file_digest", "for_export", "hints_filename",
     "identity_strength", "is_comparable", "is_verifiable", "is_verifiable_stamp",
     "kind_for", "new_hints", "note_seen", "now_iso", "parse_stamp",
-    "private_locators", "read_hints", "read_stamp", "scan_directory",
-    "scope_for", "split_identity", "stamp_filename", "stamp_identity",
+    "private_locators", "read_hints", "read_stamp", "receipt", "scan_directory",
+    "scope_for", "split_identity", "stamp_description", "stamp_filename",
+    "stamp_identity", "stamp_title",
     "stamps_agree", "substance", "validate_stamp", "walk_chain", "write_hints",
     "write_public_hints", "write_stamp",
 ]
