@@ -333,7 +333,9 @@ o compressione dell'archivio. Misurato su TempluMare (`RM/`): il `.3tz` (sha256
 
 Il `.3tz` ha **un solo profilo canonico**, quello di 3DSC, scritto in
 [`profiles/3tz.md`](profiles/3tz.md): solo un archivio canonico ha uno sha256
-che nomina il contenuto e non il momento dell'impacchettamento.
+che nomina il contenuto e non il momento dell'impacchettamento. I nomi vi sono
+in NFC come qui, e il flag `0x800` sta esattamente sui nomi non ASCII (caso
+`23`).
 
 ### Il datablock
 

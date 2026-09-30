@@ -11,6 +11,18 @@ not changed the format.
 
 ## [Unreleased]
 
+### Changed — the one `.3tz` profile: NFC names, flag `0x800` (22-10-2026)
+- `profiles/3tz.md`: every name in **Unicode NFC** (macOS gives NFD: the same
+  folder gave two sha256), and flags **0 on an ASCII name, `0x800` on a
+  non-ASCII one**, nothing else. `is_canonical_3tz` gains the criterion
+  `names_nfc`; `CANONICAL_3TZ["name_form"]`. s3Dgraphy's
+  `CANONICAL_3TZ_PROFILE` is aligned the same day: the two verifiers no longer
+  differ.
+- The producer computes `self.content_digest` (`computed_by: producer`) while
+  it packs: 3DSC's `write_3tz` does.
+- Conformance case `23` (a non-ASCII name) and
+  `conformance/data/small-tileset-non-ascii-canonical.3tz`, written by 3DSC.
+
 ### Added — the resource of more than one file (spec revision 21-10-2026)
 - `self.packaging` is an enumerated vocabulary, `PACKAGINGS`: `file`,
   `file_set`, `directory`, `archive`, `datablock` (s3Dgraphy's). An unknown

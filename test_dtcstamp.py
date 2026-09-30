@@ -865,6 +865,38 @@ class Trees(unittest.TestCase):
             # the UTF-8 flag on the non-ASCII name is part of the profile
             self.assertEqual(S.tree_members(src)[0]["path"], "Data/città.b3dm")
 
+    def test_a_name_in_nfd_is_not_canonical_and_the_content_does_not_care(self):
+        # macOS hands «città» over as «citta» + U+0300: a writer that does not
+        # normalise packs another name, and so another sha256.
+        import hashlib, struct, unicodedata, zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            nfc = _zip(src, str(pathlib.Path(tmp, "nfc.3tz")), compress=False)
+            nfd = str(pathlib.Path(tmp, "nfd.3tz"))
+            with zipfile.ZipFile(nfc) as a:
+                infos = [(i, a.read(i)) for i in a.infolist()]
+            records = []
+            with zipfile.ZipFile(nfd, "w") as b:
+                for info, data in infos:
+                    if info.filename == S.INDEX_NAME_3TZ:
+                        records.sort(key=lambda r: struct.unpack("<QQ", r[0]))
+                        data = b"".join(m + struct.pack("<Q", o) for m, o in records)
+                    else:
+                        info.filename = unicodedata.normalize("NFD", info.filename)
+                        info.orig_filename = info.filename
+                    b.writestr(info, data)
+                    if info.filename != S.INDEX_NAME_3TZ:
+                        records.append((hashlib.md5(info.filename.encode()).digest(),
+                                        info.header_offset))
+            verdict = S.is_canonical_3tz(nfd)
+            self.assertFalse(verdict["canonical"])
+            self.assertEqual(sorted(k for k, v in verdict.items() if v is False),
+                             ["canonical", "names_nfc"])
+            self.assertTrue(any("NFC" in r for r in verdict["reasons"]))
+            self.assertTrue(S.is_canonical_3tz(nfc)["canonical"])
+            self.assertNotEqual(S.file_digest(nfd), S.file_digest(nfc))
+            self.assertEqual(S.content_digest(nfd), S.content_digest(nfc))
+
     def test_a_record_the_index_misses_is_not_a_3tz(self):
         import zipfile
         with tempfile.TemporaryDirectory() as tmp:

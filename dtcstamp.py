@@ -1252,9 +1252,9 @@ def content_digest_block(path: str, *, computed_by: str = "stamper",
 
 #: The canonical 3tz — the archive 3DSC writes (``3D-survey-collection/
 #: cesium_exporter/archive_3tz.py``, commit ``1430128``, ``write_3tz`` with
-#: ``compress=False``), the same as s3Dgraphy's ``CANONICAL_3TZ_PROFILE``
-#: (``0bbf68a``) except for one measured edge (flag 0x800 below). See
-#: ``profiles/3tz.md``.
+#: ``compress=False``, plus the NFC names it writes from 22 Oct 2026), the
+#: same as s3Dgraphy's ``CANONICAL_3TZ_PROFILE``, aligned that day on flag
+#: 0x800 and NFC. See ``profiles/3tz.md``.
 CANONICAL_3TZ = {
     "source": "3D-survey-collection/cesium_exporter/archive_3tz.py",
     "source_commit": "1430128",
@@ -1263,6 +1263,7 @@ CANONICAL_3TZ = {
     "create_system": 3,
     "external_attr": 0o100644 << 16,
     "skip_names": SKIP_NAMES,
+    "name_form": "NFC",
 }
 
 #: The general-purpose flag Python's zipfile — and so 3DSC — sets on an entry
@@ -1313,6 +1314,8 @@ def is_canonical_3tz(path: str) -> Dict[str, Any]:
                                                   i.header_offset) >= 0xFFFFFFFF
                                for i in infos),
         "flags": all(i.flag_bits == _expected_flags(i.filename) for i in infos),
+        "names_nfc": all(unicodedata.normalize(prof["name_form"], i.filename)
+                         == i.filename for i in infos),
         "tileset_at_root": "tileset.json" in names,
         "no_3tz_paths": not any(".3tz" in n.lower() for n in names),
         "no_skipped_names": not any(n.rsplit("/", 1)[-1] in prof["skip_names"]
@@ -1329,7 +1332,10 @@ def is_canonical_3tz(path: str) -> Dict[str, Any]:
         "create_system": "create_system is not 3 (unix)",
         "external_attr": "file attributes are not 0o100644",
         "no_extra_fields": "entries carry extra fields",
-        "flags": "general purpose flags other than 0x800 on a non-ASCII name",
+        "flags": "general purpose flags other than 0 on an ASCII name and "
+                 "0x800 on a non-ASCII one",
+        "names_nfc": "names are not in Unicode NFC (a name as macOS gives it, "
+                     "NFD: the same folder would give another sha256 elsewhere)",
         "tileset_at_root": "no tileset.json at the root",
         "no_3tz_paths": "a path contains '.3tz'",
         "no_skipped_names": ".DS_Store / Thumbs.db are packed",
@@ -1345,6 +1351,13 @@ def is_canonical_3tz(path: str) -> Dict[str, Any]:
             seen = sorted({hex(i.external_attr) for i in infos}
                           - {hex(prof["external_attr"])})
             text += f": {seen[:3]}, not {hex(prof['external_attr'])}"
+        if key == "names_nfc":
+            text += ": " + str([i.filename for i in infos
+                                if unicodedata.normalize("NFC", i.filename)
+                                != i.filename][:3])
+        if key == "flags":
+            text += ": " + str([(i.filename, hex(i.flag_bits)) for i in infos
+                                if i.flag_bits != _expected_flags(i.filename)][:3])
         reasons.append(text)
     return {**checks, "canonical": not reasons, "reasons": reasons,
             "members": len(members),
