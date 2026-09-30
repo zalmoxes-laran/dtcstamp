@@ -11,6 +11,33 @@ not changed the format.
 
 ## [Unreleased]
 
+### Added — the resource of more than one file (spec revision 21-10-2026)
+- `self.packaging` is an enumerated vocabulary, `PACKAGINGS`: `file`,
+  `file_set`, `directory`, `archive`, `datablock` (s3Dgraphy's). An unknown
+  value is kept, not refused.
+- `digest_covers: members`: the digest is the sha256 of the canonical list of
+  the members — `role NUL path NUL sha256:<hex> LF`, NFC paths, sorted by
+  UTF-8 bytes. `members_canonical`, `members_digest`, `canonical_members`,
+  `member_path`, `BadMembers`.
+- A `file_set` carries its list in `self.members`, found by following the
+  entry point (`mtllib`/`map_*`, glTF `buffers`/`images`, glb):
+  `follow_references`, `new_file_set_stamp`, `file_set_stamp_path`,
+  `verify_members` (missing · changed · extra · list consistent),
+  `unclaimed_files`; ceiling `MAX_FILE_SET_MEMBERS` = 64.
+- `self.content_digest` `{digest, files, computed_by}` for a tree, the same for
+  a folder and its `.3tz`: `tree_members`, `content_digest` (a 3tz read through
+  its index, nothing extracted), `content_digest_block`, `new_tree_stamp`,
+  `same_content`, `verify_tree`. `self.content_digest` is part of `substance`.
+- The one `.3tz` profile, 3DSC's, in `profiles/3tz.md`, and
+  `is_canonical_3tz` / `CANONICAL_3TZ`. Differs from s3Dgraphy's
+  `CANONICAL_3TZ_PROFILE` on one measured point: flag `0x800` on a non-ASCII
+  name is allowed (3DSC writes it).
+- Datablocks: `new_datablock_stamp` (no byte digest; the `blend://` locator is
+  a private hint), `blend_locator` / `parse_blend_locator` (s3Dgraphy's form).
+- Conformance cases 18–22 and `conformance/data/` (two small `.3tz`).
+- `STAMP_VERSION` stays 1: everything added is optional, nothing valid became
+  invalid, and an old reader can only fail loudly on a members digest.
+
 ### Changed — the vocabulary of `dtc_kind` (spec text, 30-09-2026)
 - `stamp-format.md` no longer says that «decimation» is not part of the
   vocabulary: since s3Dgraphy's `em_visual_rules` 1.6.22 it is a `process`

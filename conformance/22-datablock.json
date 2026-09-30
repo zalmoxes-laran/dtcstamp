@@ -1,0 +1,27 @@
+{
+ "case": "a datablock: an object inside a .blend, with no digest of bytes",
+ "why": "A datablock has no canonical bytes. The stamp says so with the prefix (emstruct1: compares, never proves) and carries no path: the blend:// locator is a private hint. The locator's form is s3Dgraphy's make_blend_locator, pinned here with a space and an accent so the two cannot drift.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:ob-podio-lod1",
+   "packaging": "datablock",
+   "digest": "emstruct1:7777777777777777777777777777777777777777",
+   "digest_covers": "artifact"
+  }
+ },
+ "blend": {
+  "path": "RB/TempluMare 2021.blend",
+  "type": "Object",
+  "name": "OB_PODIO_LOD1 è"
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "comparable",
+  "verifiable": false,
+  "packaging": "datablock",
+  "blend_locator": "blend://RB/TempluMare%202021.blend#Object/OB_PODIO_LOD1%20%C3%A8",
+  "hint_scope": "private",
+  "hint_kind": "blend"
+ }
+}

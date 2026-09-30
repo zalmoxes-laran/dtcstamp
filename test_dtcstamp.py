@@ -44,6 +44,16 @@ def _dotted(obj, path):
 _MISSING = object()
 
 
+def _materialise(files, root):
+    """Write a case's `files` ({path: {text} | {base64}}) under `root`."""
+    import base64
+    for rel, value in files.items():
+        target = pathlib.Path(root, *rel.split("/"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(value["text"].encode("utf-8") if "text" in value
+                           else base64.b64decode(value["base64"]))
+
+
 class Corpus(unittest.TestCase):
     """Every file in `conformance/`, checked against what it says it expects."""
 
@@ -61,6 +71,14 @@ class Corpus(unittest.TestCase):
 
     def _run_case(self, case):
         expect = case["expect"]
+        if "members" in case:
+            return self._run_members(case["members"], expect)
+        if "file_set" in case:
+            return self._run_file_set(case["file_set"], expect)
+        if "tree" in case:
+            return self._run_tree(case["tree"], expect)
+        if "blend" in case:
+            self._run_blend(case["blend"], expect)
         if "pair" in case:
             return self._run_pair(case["pair"], expect)
         if "resolvable" in case:
@@ -83,6 +101,9 @@ class Corpus(unittest.TestCase):
         if "verifiable" in expect:
             self.assertEqual(S.is_verifiable_stamp(validated),
                              expect["verifiable"])
+        if "packaging" in expect:
+            self.assertEqual((validated.get("self") or {}).get("packaging"),
+                             expect["packaging"])
         if "parents" in expect:
             self.assertEqual(len(validated.get("from") or []),
                              expect["parents"])
@@ -109,6 +130,56 @@ class Corpus(unittest.TestCase):
                 back = S.read_stamp(target)
             self.assertIsNot(_dotted(back, path), _MISSING,
                              f"{path} did not survive the round trip")
+
+    def _run_members(self, members, expect):
+        self.assertEqual(S.members_canonical(members).decode("utf-8"),
+                         expect["members_canonical"])
+        self.assertEqual(S.members_digest(members), expect["members_digest"])
+        if "canonical_members" in expect:
+            self.assertEqual(S.canonical_members(members),
+                             expect["canonical_members"])
+
+    def _run_file_set(self, spec, expect):
+        with tempfile.TemporaryDirectory() as tmp:
+            _materialise(spec["files"], tmp)
+            found = S.follow_references(str(pathlib.Path(tmp) / spec["entry_point"]))
+            self.assertEqual(found["members"], expect["members"])
+            self.assertEqual(S.members_digest(found["members"]),
+                             expect["members_digest"])
+            if "unclaimed" in expect:
+                self.assertEqual(S.unclaimed_files(tmp, [found]),
+                                 expect["unclaimed"])
+            if "warnings" in expect:
+                self.assertEqual(found["warnings"], expect["warnings"])
+
+    def _run_tree(self, spec, expect):
+        archive = str(CORPUS / spec["archive"])
+        self.assertEqual(S.file_digest(archive), expect["archive_sha256"])
+        self.assertEqual(S.content_digest(archive), expect["content_digest"])
+        verdict = S.is_canonical_3tz(archive)
+        self.assertEqual(verdict["canonical"], expect["canonical"])
+        if "failed_criteria" in expect:
+            self.assertEqual(sorted(k for k, v in verdict.items() if v is False),
+                             expect["failed_criteria"])
+        for fragment in expect.get("reasons_contain", []):
+            self.assertTrue(any(fragment in r for r in verdict["reasons"]),
+                            f"no reason mentions {fragment!r}")
+        with tempfile.TemporaryDirectory() as tmp:
+            _materialise(spec["files"], tmp)
+            # ONE CONTENT, TWO FORMS: the folder gives what the archive gives
+            self.assertEqual(S.content_digest(tmp), expect["content_digest"])
+            if "members" in expect:
+                self.assertEqual(S.tree_members(tmp), expect["members"])
+            if "files" in expect:
+                self.assertEqual(len(S.tree_members(tmp)), expect["files"])
+
+    def _run_blend(self, spec, expect):
+        locator = S.blend_locator(spec["path"], spec["type"], spec["name"])
+        self.assertEqual(locator, expect["blend_locator"])
+        self.assertEqual(S.parse_blend_locator(locator),
+                         (spec["path"], spec["type"], spec["name"]))
+        self.assertEqual(S.kind_for(locator), expect.get("hint_kind", "blend"))
+        self.assertEqual(S.scope_for(locator), expect.get("hint_scope", "private"))
 
     def _run_pair(self, pair, expect):
         mine, theirs = S.validate_stamp(pair[0]), S.validate_stamp(pair[1])
@@ -580,6 +651,272 @@ class HintsThatDoNotTravel(unittest.TestCase):
         hints = S.new_hints(SHA("a"))
         with self.assertRaises(ValueError):
             S.note_seen(hints, "/tmp/x", scope="maybe")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE RESOURCE OF MORE THAN ONE FILE (21-10-2026)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _obj_set(root, name="m", textures=("a.png",), mtl_extra=""):
+    root = pathlib.Path(root)
+    (root / "textures").mkdir(parents=True, exist_ok=True)
+    (root / f"{name}.obj").write_text(f"mtllib {name}.mtl\nv 0 0 0\n")
+    lines = [f"newmtl {name}"] + [f"map_Kd textures/{t}" for t in textures]
+    (root / f"{name}.mtl").write_text("\n".join(lines) + "\n" + mtl_extra)
+    for t in textures:
+        (root / "textures" / t).write_bytes(t.encode() * 3)
+    return str(root / f"{name}.obj")
+
+
+class TheCanonicalList(unittest.TestCase):
+
+    def test_order_and_spelling_do_not_change_the_digest(self):
+        a = [{"role": "entry_point", "path": "x.obj", "digest": SHA("a")},
+             {"path": "t/y.png", "digest": SHA("b")}]
+        b = [{"path": "t\\y.png", "digest": SHA("B")},
+             {"role": "entry_point", "path": "/x.obj", "digest": SHA("a")}]
+        self.assertEqual(S.members_digest(a), S.members_digest(b))
+
+    def test_THE_COUNTEREXAMPLE_a_role_changes_it(self):
+        a = [{"role": "entry_point", "path": "x.obj", "digest": SHA("a")}]
+        b = [{"role": "member", "path": "x.obj", "digest": SHA("a")}]
+        self.assertNotEqual(S.members_digest(a), S.members_digest(b))
+
+    def test_nfc(self):
+        composed = [{"path": "caf\u00e9.png", "digest": SHA("a")}]
+        decomposed = [{"path": "cafe\u0301.png", "digest": SHA("a")}]
+        self.assertEqual(S.members_canonical(composed),
+                         S.members_canonical(decomposed))
+
+    def test_what_has_no_canonical_form_is_refused(self):
+        for bad in ([{"path": "a/../b", "digest": SHA("a")}],
+                    [{"path": "a\x00b", "digest": SHA("a")}],
+                    [{"path": "", "digest": SHA("a")}],
+                    [{"path": "a", "digest": "md5:" + "a" * 32}],
+                    [{"path": "a", "digest": "a" * 64}],
+                    [{"path": "a", "digest": SHA("a")}, {"path": "/a", "digest": SHA("b")}],
+                    [{"role": "entry_point", "path": "a", "digest": SHA("a")},
+                     {"role": "entry_point", "path": "b", "digest": SHA("b")}],
+                    [{"role": "door", "path": "a", "digest": SHA("a")}]):
+            with self.subTest(bad=bad), self.assertRaises(S.BadMembers):
+                S.members_digest(bad)
+
+    def test_a_space_is_part_of_the_name_a_control_character_is_refused(self):
+        # NUL separates, so a space never splits a field; control characters
+        # (a tab, a newline) are refused rather than written
+        one = [{"path": "stone normal.png", "digest": SHA("a")}]
+        self.assertIn(b"\x00stone normal.png\x00", S.members_canonical(one))
+        with self.assertRaises(S.BadMembers):
+            S.members_canonical([{"path": "a\tb", "digest": SHA("a")}])
+
+
+class FileSets(unittest.TestCase):
+
+    def test_members_are_found_not_the_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            door = _obj_set(tmp, "m", ("a.png", "b.png"))
+            _obj_set(tmp, "other", ("c.png",))
+            found = S.follow_references(door)
+            self.assertEqual([m["path"] for m in found["members"]],
+                             ["m.mtl", "m.obj", "textures/a.png", "textures/b.png"])
+            self.assertEqual(found["members"][1]["role"], "entry_point")
+
+    def test_outside_and_absolute_are_warnings_not_members(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = pathlib.Path(tmp, "lod")
+            door = _obj_set(sub, mtl_extra="map_Ks ../escape.png\nmap_Ns /abs/x.png\n")
+            pathlib.Path(tmp, "escape.png").write_bytes(b"x")
+            found = S.follow_references(door)
+            self.assertEqual(len(found["outside"]), 2)
+            self.assertEqual(len(found["warnings"]), 2)
+            self.assertNotIn("../escape.png", [m["path"] for m in found["members"]])
+
+    def test_gltf_buffers_and_images_in_subfolders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "bin").mkdir(); (root / "img").mkdir()
+            (root / "bin" / "m.bin").write_bytes(b"\0" * 8)
+            (root / "img" / "base color.png").write_bytes(b"png")
+            (root / "m.gltf").write_text(json.dumps({
+                "asset": {"version": "2.0"},
+                "buffers": [{"uri": "bin/m.bin"}, {"uri": "data:application/octet-stream;base64,AA=="}],
+                "images": [{"uri": "img/base%20color.png"}]}))
+            found = S.follow_references(str(root / "m.gltf"))
+            self.assertEqual([m["path"] for m in found["members"]],
+                             ["bin/m.bin", "img/base color.png", "m.gltf"])
+
+    def test_glb_json_chunk(self):
+        import struct
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "t.png").write_bytes(b"png")
+            doc = json.dumps({"asset": {"version": "2.0"}, "buffers": [{"byteLength": 4}],
+                              "images": [{"uri": "t.png"}]}).encode()
+            doc += b" " * (-len(doc) % 4)
+            body = struct.pack("<I4s", len(doc), b"JSON") + doc
+            (root / "m.glb").write_bytes(struct.pack("<4sII", b"glTF", 2, 12 + len(body)) + body)
+            found = S.follow_references(str(root / "m.glb"))
+            self.assertEqual([m["path"] for m in found["members"]], ["m.glb", "t.png"])
+
+    def test_verification_missing_changed_extra(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            door = _obj_set(tmp, "m", ("a.png",))
+            stamp = S.new_file_set_stamp(door, "res:m")
+            self.assertTrue(S.verify_members(stamp, door)["ok"])
+            tex = pathlib.Path(tmp, "textures", "a.png")
+            tex.write_bytes(b"changed")
+            self.assertEqual(S.verify_members(stamp, door)["changed"], ["textures/a.png"])
+            mtl = pathlib.Path(tmp, "m.mtl")
+            mtl.write_text(mtl.read_text() + "map_Ks textures/new.png\n")
+            pathlib.Path(tmp, "textures", "new.png").write_bytes(b"n")
+            report = S.verify_members(stamp, door)
+            self.assertEqual(report["extra"], ["textures/new.png"])
+            self.assertIn("m.mtl", report["changed"])
+            mtl.unlink()
+            self.assertEqual(S.verify_members(stamp, door)["missing"], ["m.mtl"])
+
+    def test_a_hand_edited_list_is_seen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            door = _obj_set(tmp)
+            stamp = S.new_file_set_stamp(door, "res:m")
+            stamp["self"]["members"] = stamp["self"]["members"][:-1]
+            report = S.verify_members(stamp, door)
+            self.assertFalse(report["list_consistent"])
+            self.assertFalse(report["ok"])
+
+    def test_a_shared_texture_is_allowed_and_breaks_both(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            one = _obj_set(tmp, "one", ("shared.png",))
+            two = _obj_set(tmp, "two", ("shared.png",))
+            s1, s2 = S.new_file_set_stamp(one, "res:1"), S.new_file_set_stamp(two, "res:2")
+            self.assertTrue(S.verify_members(s1, one)["ok"])
+            self.assertTrue(S.verify_members(s2, two)["ok"])
+            self.assertEqual(S.unclaimed_files(tmp, [s1, s2]), [])
+            pathlib.Path(tmp, "textures", "shared.png").write_bytes(b"x")
+            self.assertFalse(S.verify_members(s1, one)["ok"])
+            self.assertFalse(S.verify_members(s2, two)["ok"])
+
+    def test_the_ceiling(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            many = tuple(f"t{i:03d}.png" for i in range(S.MAX_FILE_SET_MEMBERS))
+            door = _obj_set(tmp, "m", many)
+            with self.assertRaises(S.BadMembers) as caught:
+                S.new_file_set_stamp(door, "res:m")
+            self.assertIn("content_digest", str(caught.exception))
+
+    def test_the_sidecar_is_beside_the_door_and_notes_do_not_leave(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            door = _obj_set(tmp, "OB_PODIO_LOD1")
+            self.assertTrue(S.file_set_stamp_path(door).endswith("OB_PODIO_LOD1.obj.stamp.json"))
+            stamp = S.new_file_set_stamp(door, "res:m")
+            S.write_stamp(stamp, S.file_set_stamp_path(door))
+            back = S.read_stamp(S.file_set_stamp_path(door))
+            self.assertNotIn("_followed", back)
+            self.assertEqual(back["self"]["digest_covers"], "members")
+            self.assertEqual(S.identity_strength(back["self"]["digest"]), "verifiable")
+
+
+def _small_tree(root):
+    root = pathlib.Path(root)
+    (root / "Data").mkdir(parents=True)
+    (root / "tileset.json").write_text('{"asset": {"version": "1.0"}}')
+    (root / "Data" / "città.b3dm").write_bytes(b"b3dm" + b"\1" * 50)
+    (root / ".DS_Store").write_bytes(b"junk")
+    return str(root)
+
+
+def _zip(src, out, *, compress, date=(1980, 1, 1, 0, 0, 0)):
+    import hashlib, struct, zipfile, os
+    names = sorted(p.relative_to(src).as_posix() for p in pathlib.Path(src).rglob("*")
+                   if p.is_file() and p.name not in S.SKIP_NAMES)
+    records = []
+    with zipfile.ZipFile(out, "w") as zf:
+        for n in names:
+            zi = zipfile.ZipInfo(n, date_time=date)
+            zi.compress_type = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
+            zi.create_system = 3
+            zi.external_attr = 0o100644 << 16
+            zf.writestr(zi, pathlib.Path(src, n).read_bytes())
+            records.append((hashlib.md5(n.encode()).digest(), zi.header_offset))
+        records.sort(key=lambda r: struct.unpack("<QQ", r[0]))
+        index = b"".join(m + struct.pack("<Q", o) for m, o in records)
+        zi = zipfile.ZipInfo(S.INDEX_NAME_3TZ, date_time=date)
+        zi.create_system = 3
+        zi.external_attr = 0o100644 << 16
+        zf.writestr(zi, index)
+    return out
+
+
+class Trees(unittest.TestCase):
+
+    def test_folder_and_archive_share_the_content_digest_whatever_the_packing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            stored = _zip(src, str(pathlib.Path(tmp, "a.3tz")), compress=False)
+            deflated = _zip(src, str(pathlib.Path(tmp, "b.3tz")), compress=True,
+                            date=(2026, 9, 30, 20, 5, 54))
+            digest = S.content_digest(src)
+            self.assertEqual(S.content_digest(stored), digest)
+            self.assertEqual(S.content_digest(deflated), digest)
+            self.assertNotEqual(S.file_digest(stored), S.file_digest(deflated))
+            self.assertTrue(S.is_canonical_3tz(stored)["canonical"],
+                            S.is_canonical_3tz(stored)["reasons"])
+            self.assertFalse(S.is_canonical_3tz(deflated)["canonical"])
+            # the UTF-8 flag on the non-ASCII name is part of the profile
+            self.assertEqual(S.tree_members(src)[0]["path"], "Data/città.b3dm")
+
+    def test_a_record_the_index_misses_is_not_a_3tz(self):
+        import zipfile
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            arc = _zip(src, str(pathlib.Path(tmp, "a.3tz")), compress=False)
+            broken = str(pathlib.Path(tmp, "broken.3tz"))
+            with zipfile.ZipFile(arc) as a, zipfile.ZipFile(broken, "w") as b:
+                for info in a.infolist():
+                    if info.filename == S.INDEX_NAME_3TZ:
+                        b.writestr(zipfile.ZipInfo("extra.b3dm"), b"x")
+                    b.writestr(info, a.read(info))
+            with self.assertRaises(ValueError):
+                S.content_digest(broken)
+
+    def test_two_forms_of_one_thing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            arc = _zip(src, str(pathlib.Path(tmp, "a.3tz")), compress=False)
+            folder = S.new_tree_stamp(src, "res:t_link", computed_by="producer")
+            archive = S.new_tree_stamp(arc, "res:t_archive", computed_by="producer")
+            self.assertEqual(folder["self"]["packaging"], "directory")
+            self.assertEqual(folder["self"]["digest_covers"], "members")
+            self.assertEqual(archive["self"]["packaging"], "archive")
+            self.assertEqual(archive["self"]["digest_covers"], "artifact")
+            self.assertEqual(archive["self"]["content_digest"]["files"], 2)
+            self.assertTrue(S.same_content(folder, archive))
+            self.assertTrue(S.verify_tree(folder, src)["ok"])
+            self.assertTrue(S.verify_tree(archive, arc)["ok"])
+            pathlib.Path(src, "tileset.json").write_text("{}")
+            self.assertFalse(S.verify_tree(folder, src)["ok"])
+
+    def test_THE_COUNTEREXAMPLE_other_content_is_not_the_same(self):
+        a = {"stamp": 1, "self": {"resource_id": "a", "content_digest": {"digest": SHA("1")}}}
+        b = {"stamp": 1, "self": {"resource_id": "b", "content_digest": {"digest": SHA("2")}}}
+        self.assertFalse(S.same_content(a, b))
+        self.assertEqual([d.path for d in S.compare_stamps(a, b)],
+                         ["self.content_digest"])
+
+
+class Datablocks(unittest.TestCase):
+
+    def test_no_digest_of_bytes_and_no_path_in_the_stamp(self):
+        stamp, hints = S.new_datablock_stamp("res:ob", "/Users/x/a.blend", "OB")
+        self.assertNotIn("digest", stamp["self"])
+        self.assertIsNone(S.identity_strength(stamp["self"].get("digest")))
+        self.assertNotIn("a.blend", json.dumps(stamp))
+        self.assertEqual(hints["seen"][0]["scope"], "private")
+        self.assertEqual(S.for_export(hints)["seen"], [])
+
+    def test_a_byte_digest_is_refused_for_a_datablock(self):
+        with self.assertRaises(ValueError):
+            S.new_datablock_stamp("res:ob", "a.blend", "OB", structural_digest=SHA("1"))
 
 
 if __name__ == "__main__":

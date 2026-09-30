@@ -12,6 +12,10 @@ include stamp-format.md
 # implementation (the JavaScript port, or somebody else's) needs the cases and
 # their expected outcome, not just the Python that happens to pass them.
 recursive-include conformance *.json
+recursive-include conformance/data *.3tz
+
+# The one .3tz profile is part of the specification.
+recursive-include profiles *.md
 
 exclude .bumpversion.cfg
 exclude bump_and_push.sh

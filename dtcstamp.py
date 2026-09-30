@@ -48,6 +48,11 @@ import hashlib
 import json
 import os
 import pathlib
+import re
+import struct
+import unicodedata
+import zipfile
+import zlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
@@ -463,6 +468,11 @@ def substance(stamp: Dict[str, Any]) -> Dict[str, Any]:
     out["self.packaging"] = itself.get("packaging")
     out["self.tier"] = itself.get("tier")
     out["self.measures"] = itself.get("measures")
+    # the identity of the CONTENT of a tree: two stamps for the same bytes that
+    # name two contents contradict each other. `computed_by` and `files` are
+    # not substance — the digest already says everything they could.
+    out["self.content_digest"] = (itself.get("content_digest") or {}).get("digest") \
+        if isinstance(itself.get("content_digest"), dict) else None
     # NOT `self.label` nor `self.description`: a title is a courtesy, and two
     # people naming the same bytes differently have not disagreed about them.
 
@@ -926,6 +936,817 @@ def _this_machine() -> Optional[str]:
     return uname().nodename if callable(uname) else None
 
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE RESOURCE OF MORE THAN ONE FILE — the list of its members is its identity
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Decided by E.D. on 30 Sep 2026: a resource is the SET, each file is a member
+# of it. An OBJ is not a file: it is the obj, the mtl it calls, and the
+# textures the mtl calls — and the digest of the obj alone would say «these are
+# those bytes» about a third of the thing. So the digest of a resource of more
+# than one file is the digest of the SORTED LIST of its members (role, path,
+# checksum), in one canonical form fixed here byte for byte, because two
+# implementations that disagree on a separator disagree on every identity.
+#
+# A tileset has TWO identities, and they are not in competition: the sha256 of
+# the `.3tz` names that file; the digest of the list (path, sha256) of what is
+# inside names the CONTENT, and a folder and its `.3tz` share it. Whoever
+# produces the tileset computes it — they have the files in hand anyway.
+
+#: What ``self.packaging`` says, measured on s3Dgraphy (``PACKAGINGS`` of the
+#: resource, 30 Sep 2026) and on the corpus (``file``, ``datablock``). A value
+#: that is not here is kept, not refused: the vocabulary is enumerated so that
+#: writers agree, not so that a reader can throw a record away.
+PACKAGINGS = ("file", "file_set", "directory", "archive", "datablock")
+
+#: What ``self.digest_covers`` says. ``members``: the digest is the sha256 of
+#: the canonical list of the members (:func:`members_canonical`), not of any
+#: file's bytes.
+DIGEST_COVERS = ("artifact", "payload", "members")
+
+#: The role of a member, as s3Dgraphy's ``has_file`` spells it.
+ENTRY_POINT = "entry_point"
+MEMBER = "member"
+MEMBER_ROLES = (ENTRY_POINT, MEMBER)
+
+#: Who computed a ``content_digest``: the producer at export, or whoever
+#: stamped the tree afterwards. Two words, because the second one read bytes
+#: that may already have been moved or edited, and a reader has the right to
+#: know which.
+COMPUTED_BY = ("producer", "stamper")
+
+#: The field separator of the canonical list: NUL, the one character no path on
+#: any file system can contain — so a path can hold a tab, a space or even a
+#: newline and the list still reads back one way only.
+MEMBERS_SEPARATOR = "\x00"
+#: The end of every line, the last one included.
+MEMBERS_EOL = "\n"
+
+#: A ``file_set`` lists its members inside the stamp, so it must stay small.
+#: MEASURED on TempluMare: 3 members at LOD1/LOD2, 6 at LOD0; a glTF with a
+#: full PBR material per part rarely passes twenty. Over this ceiling it is a
+#: tree, and a tree is identified by :func:`content_digest` without a list.
+MAX_FILE_SET_MEMBERS = 64
+
+#: Never members of a tree: what a file browser leaves behind. The same list as
+#: the 3tz profile's, and it MUST be the same — otherwise a folder and its
+#: archive could not share a content digest.
+SKIP_NAMES = (".DS_Store", "Thumbs.db")
+
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+
+
+class BadMembers(ValueError):
+    """This list of members has no canonical form."""
+
+
+def member_path(path: str) -> str:
+    """The path of a member as the canonical list writes it.
+
+    Forward slashes, no leading slash, Unicode NFC (a name typed on a Mac and
+    the same name typed on Windows are the same name). Refused — not repaired —
+    an empty path, an empty, ``.`` or ``..`` segment, and a control character:
+    each of those is a path that means two things.
+    """
+    text = unicodedata.normalize("NFC", str(path)).replace("\\", "/").lstrip("/")
+    if not text:
+        raise BadMembers("an empty path is not a member")
+    if any(ord(c) < 0x20 or c == "\x7f" for c in text):
+        raise BadMembers(f"{text!r}: a control character in a path")
+    for segment in text.split("/"):
+        if segment in ("", ".", ".."):
+            raise BadMembers(
+                f"{text!r}: a path with an empty, '.' or '..' segment names "
+                f"more than one place")
+    return text
+
+
+def _member_digest(member: Dict[str, Any]) -> str:
+    value = member.get("digest") or member.get("checksum")
+    scheme, rest = split_identity(value)
+    if scheme != "sha256" or not rest or not _SHA256_HEX.match(rest.lower()):
+        raise BadMembers(
+            f"{member.get('path')!r}: a member needs `sha256:<64 hex>`, got "
+            f"{value!r}")
+    return "sha256:" + rest.lower()
+
+
+def canonical_members(members: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The members normalised and sorted: ``[{role, path, digest}]``, plus
+    ``size_bytes`` when it was given.
+
+    Sorted by the UTF-8 bytes of the NFC path. At most one ``entry_point``; no
+    path twice (after normalisation, so ``a\\b`` and ``a/b`` collide as they
+    should).
+    """
+    out, seen, entries = [], set(), 0
+    for member in members:
+        if not isinstance(member, dict):
+            raise BadMembers(f"a member is an object, got {type(member).__name__}")
+        role = member.get("role") or MEMBER
+        if role not in MEMBER_ROLES:
+            raise BadMembers(f"role {role!r}: one of {list(MEMBER_ROLES)}")
+        path = member_path(member.get("path") or "")
+        if path in seen:
+            raise BadMembers(f"{path!r} is listed twice")
+        seen.add(path)
+        entries += role == ENTRY_POINT
+        row = {"role": role, "path": path, "digest": _member_digest(member)}
+        size = member.get("size_bytes")
+        if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
+            row["size_bytes"] = size
+        out.append(row)
+    if entries > 1:
+        raise BadMembers(f"{entries} entry points: a resource has one door")
+    out.sort(key=lambda r: r["path"].encode("utf-8"))
+    return out
+
+
+def members_canonical(members: Iterable[Dict[str, Any]]) -> bytes:
+    """The canonical list, byte for byte — what :func:`members_digest` hashes.
+
+    One line per member, in path order::
+
+        <role> NUL <path> NUL sha256:<hex> LF
+
+    UTF-8, NFC paths, lower-case hex, and a LF after every line including the
+    last. ``size_bytes`` is not in it: the size follows from the bytes.
+    """
+    lines = [MEMBERS_SEPARATOR.join((m["role"], m["path"], m["digest"]))
+             + MEMBERS_EOL for m in canonical_members(members)]
+    return "".join(lines).encode("utf-8")
+
+
+def members_digest(members: Iterable[Dict[str, Any]]) -> str:
+    """``sha256:<hex>`` of :func:`members_canonical` — the identity of a
+    resource of more than one file, and the ``content_digest`` of a tree."""
+    return "sha256:" + hashlib.sha256(members_canonical(members)).hexdigest()
+
+
+# ── a tree: a folder, or the same folder packed in a .3tz ────────────────────
+
+#: The 3tz index entry (3D Tiles Archive Format v1.3): never a member.
+INDEX_NAME_3TZ = "@3dtilesIndex1@"
+MEDIA_TYPE_3TZ = "application/vnd.maxar.archive.3tz+zip"
+_BLOCK = 1024 * 1024
+_LFH = struct.Struct("<IHHHHHIIIHH")
+_LFH_SIGNATURE = 0x04034B50
+
+
+
+def _directory_members(root: str, entry_point: Optional[str]) -> List[Dict[str, Any]]:
+    base = os.path.abspath(root)
+    out = []
+    for folder, dirs, files in os.walk(base):
+        dirs.sort()
+        for name in sorted(files):
+            if name in SKIP_NAMES:
+                continue
+            full = os.path.join(folder, name)
+            rel = os.path.relpath(full, base).replace(os.sep, "/")
+            out.append({"path": rel, "digest": file_digest(full),
+                        "size_bytes": os.path.getsize(full)})
+    return _with_entry_point(out, entry_point)
+
+
+def _with_entry_point(rows, entry_point):
+    door = member_path(entry_point) if entry_point else None
+    for row in rows:
+        row["role"] = ENTRY_POINT if door and member_path(row["path"]) == door \
+            else MEMBER
+    return rows
+
+
+def _index_records(fh, zf: zipfile.ZipFile) -> List[Tuple[bytes, int]]:
+    infos = zf.infolist()
+    if not infos or infos[-1].filename != INDEX_NAME_3TZ:
+        raise ValueError(f"not a 3tz: the last entry is not {INDEX_NAME_3TZ!r}")
+    if infos[-1].compress_type != zipfile.ZIP_STORED:
+        raise ValueError(f"not a 3tz: {INDEX_NAME_3TZ} is compressed")
+    raw = zf.read(infos[-1])
+    if len(raw) % 24:
+        raise ValueError(f"not a 3tz: an index of {len(raw)} bytes is not "
+                         f"24-byte records")
+    return [(raw[i:i + 16], struct.unpack_from("<Q", raw, i + 16)[0])
+            for i in range(0, len(raw), 24)]
+
+
+def _archive_members(path: str, entry_point: Optional[str]) -> List[Dict[str, Any]]:
+    """The members of a 3tz read THROUGH ITS INDEX, nothing extracted.
+
+    The index gives the offset of each local header; the central directory,
+    matched by that offset, gives the method, the compressed size and the CRC;
+    the bytes are streamed in blocks from the data that follows the header and
+    their CRC is checked on the way. An entry the index does not reach, or a
+    record that points at no entry, is an archive that is not a 3tz, and says
+    so.
+    """
+    out = []
+    with open(path, "rb") as fh, zipfile.ZipFile(fh) as zf:
+        records = _index_records(fh, zf)
+        by_offset = {i.header_offset: i for i in zf.infolist()
+                     if i.filename != INDEX_NAME_3TZ}
+        reached = set()
+        for md5, offset in records:
+            info = by_offset.get(offset)
+            if info is None:
+                raise ValueError(f"not a 3tz: an index record points at offset "
+                                 f"{offset}, where no entry starts")
+            name = info.filename.replace("\\", "/").lstrip("/")
+            if hashlib.md5(name.encode("utf-8")).digest() != md5:
+                raise ValueError(f"not a 3tz: the index record of {name!r} "
+                                 f"carries another MD5")
+            reached.add(offset)
+            fh.seek(offset)
+            head = fh.read(_LFH.size)
+            fields = _LFH.unpack(head)
+            if fields[0] != _LFH_SIGNATURE:
+                raise ValueError(f"no local file header at offset {offset}")
+            fh.seek(fields[9] + fields[10], os.SEEK_CUR)
+            out.append({"path": name,
+                        **_stream_member(fh, info)})
+        missing = sorted(i.filename for o, i in by_offset.items()
+                         if o not in reached)
+        if missing:
+            raise ValueError(f"not a 3tz: {len(missing)} entries the index does "
+                             f"not reach, e.g. {missing[:3]}")
+    return _with_entry_point(out, entry_point)
+
+
+def _stream_member(fh, info: zipfile.ZipInfo) -> Dict[str, Any]:
+    method, left = info.compress_type, info.compress_size
+    digest, crc, size = hashlib.sha256(), 0, 0
+    if method == zipfile.ZIP_STORED:
+        inflate = None
+    elif method == zipfile.ZIP_DEFLATED:
+        inflate = zlib.decompressobj(-15)
+    elif method == 93:
+        # Zstandard is allowed by the 3tz spec and is not standard library.
+        raise ValueError(f"{info.filename!r} is Zstandard-compressed: this "
+                         f"module reads stored and deflated entries only")
+    else:
+        raise ValueError(f"{info.filename!r}: compression method {method} is "
+                         f"not one a 3tz allows")
+    while left:
+        block = fh.read(min(_BLOCK, left))
+        if not block:
+            raise ValueError(f"{info.filename!r} is truncated")
+        left -= len(block)
+        if inflate is not None:
+            block = inflate.decompress(block)
+        digest.update(block)
+        crc = zlib.crc32(block, crc)
+        size += len(block)
+    if inflate is not None:
+        tail = inflate.flush()
+        digest.update(tail)
+        crc = zlib.crc32(tail, crc)
+        size += len(tail)
+    if crc != info.CRC or size != info.file_size:
+        raise ValueError(f"{info.filename!r}: CRC or size do not match the "
+                         f"central directory")
+    return {"digest": "sha256:" + digest.hexdigest(), "size_bytes": size}
+
+
+def tree_members(path: str, *, entry_point: Optional[str] = "tileset.json"
+                 ) -> List[Dict[str, Any]]:
+    """Every file of a tree — a folder, or a ``.3tz`` — as members, sorted.
+
+    ``entry_point`` (``tileset.json`` by default, at the root) gets the role
+    ``entry_point``; every other file is a ``member``. ``.DS_Store`` and
+    ``Thumbs.db`` are never members, and neither is the 3tz index.
+    """
+    if os.path.isdir(path):
+        rows = _directory_members(path, entry_point)
+    elif zipfile.is_zipfile(path):
+        rows = _archive_members(path, entry_point)
+    else:
+        raise ValueError(f"{path} is neither a folder nor a 3tz")
+    return canonical_members(rows)
+
+
+def content_digest(path: str, *, entry_point: Optional[str] = "tileset.json") -> str:
+    """The identity of the CONTENT of a tree: :func:`members_digest` of
+    :func:`tree_members`. A folder and its ``.3tz`` give the same value,
+    whatever the archive's dates, attributes or compression."""
+    return members_digest(tree_members(path, entry_point=entry_point))
+
+
+def content_digest_block(path: str, *, computed_by: str = "stamper",
+                         entry_point: Optional[str] = "tileset.json"
+                         ) -> Dict[str, Any]:
+    """``self.content_digest`` for a stamp: ``{digest, files, computed_by}``.
+
+    The list is NOT in the stamp — a tileset has thousands of files; the digest
+    and the count are, and whoever needs the list recomputes it from the tree.
+    """
+    if computed_by not in COMPUTED_BY:
+        raise ValueError(f"computed_by must be one of {list(COMPUTED_BY)}")
+    rows = tree_members(path, entry_point=entry_point)
+    return {"digest": members_digest(rows), "files": len(rows),
+            "computed_by": computed_by}
+
+
+# ── the one .3tz profile: 3DSC's ─────────────────────────────────────────────
+
+#: The canonical 3tz — the archive 3DSC writes (``3D-survey-collection/
+#: cesium_exporter/archive_3tz.py``, commit ``1430128``, ``write_3tz`` with
+#: ``compress=False``), the same as s3Dgraphy's ``CANONICAL_3TZ_PROFILE``
+#: (``0bbf68a``) except for one measured edge (flag 0x800 below). See
+#: ``profiles/3tz.md``.
+CANONICAL_3TZ = {
+    "source": "3D-survey-collection/cesium_exporter/archive_3tz.py",
+    "source_commit": "1430128",
+    "date_time": (1980, 1, 1, 0, 0, 0),
+    "compress_type": zipfile.ZIP_STORED,
+    "create_system": 3,
+    "external_attr": 0o100644 << 16,
+    "skip_names": SKIP_NAMES,
+}
+
+#: The general-purpose flag Python's zipfile — and so 3DSC — sets on an entry
+#: whose name is not ASCII (bit 11, «the name is UTF-8»). MEASURED 30 Sep 2026:
+#: 3DSC writes it for ``Data/città.b3dm``. Deterministic, so allowed: exactly
+#: on the non-ASCII names, and nowhere else.
+_UTF8_FLAG = 0x800
+
+
+def _expected_flags(name: str) -> int:
+    return _UTF8_FLAG if any(ord(c) > 0x7F for c in name) else 0
+
+
+def is_canonical_3tz(path: str) -> Dict[str, Any]:
+    """Whether the archive follows :data:`CANONICAL_3TZ`, criterion by
+    criterion, with the reasons when it does not.
+
+    Canonical means: the sha256 of the file names its content and not the
+    moment it was packed. A non-canonical 3tz is still a 3tz, and its
+    :func:`content_digest` is the canonical one's; only its file digest is
+    unstable.
+    """
+    prof = CANONICAL_3TZ
+    with zipfile.ZipFile(path) as zf:
+        infos = zf.infolist()
+    members = [i for i in infos if i.filename != INDEX_NAME_3TZ]
+    names = [i.filename for i in members]
+    index_last = bool(infos) and infos[-1].filename == INDEX_NAME_3TZ
+    index_sorted = False
+    if index_last and infos[-1].compress_type == zipfile.ZIP_STORED:
+        with open(path, "rb") as fh, zipfile.ZipFile(fh) as zf:
+            try:
+                keys = [struct.unpack("<QQ", md5) for md5, _ in
+                        _index_records(fh, zf)]
+                index_sorted = keys == sorted(keys)
+            except ValueError:
+                pass
+    checks = {
+        "entries_in_order": [n.encode("utf-8") for n in names]
+                            == sorted(n.encode("utf-8") for n in names),
+        "index_last": index_last,
+        "index_sorted": index_sorted,
+        "fixed_dates": all(i.date_time == prof["date_time"] for i in infos),
+        "stored": all(i.compress_type == prof["compress_type"] for i in infos),
+        "create_system": all(i.create_system == prof["create_system"] for i in infos),
+        "external_attr": all(i.external_attr == prof["external_attr"] for i in infos),
+        "no_extra_fields": all(not i.extra or max(i.file_size, i.compress_size,
+                                                  i.header_offset) >= 0xFFFFFFFF
+                               for i in infos),
+        "flags": all(i.flag_bits == _expected_flags(i.filename) for i in infos),
+        "tileset_at_root": "tileset.json" in names,
+        "no_3tz_paths": not any(".3tz" in n.lower() for n in names),
+        "no_skipped_names": not any(n.rsplit("/", 1)[-1] in prof["skip_names"]
+                                    for n in names),
+    }
+    why = {
+        "entries_in_order": "members are not in path order",
+        "index_last": f"{INDEX_NAME_3TZ} is not the last entry",
+        "index_sorted": "the index is not stored or not sorted by MD5",
+        "fixed_dates": "entries carry a date other than 1980-01-01 00:00:00 "
+                       "(the time of writing: the digest names the moment of "
+                       "packing, not the content)",
+        "stored": "entries are compressed",
+        "create_system": "create_system is not 3 (unix)",
+        "external_attr": "file attributes are not 0o100644",
+        "no_extra_fields": "entries carry extra fields",
+        "flags": "general purpose flags other than 0x800 on a non-ASCII name",
+        "tileset_at_root": "no tileset.json at the root",
+        "no_3tz_paths": "a path contains '.3tz'",
+        "no_skipped_names": ".DS_Store / Thumbs.db are packed",
+    }
+    reasons = []
+    for key, ok in checks.items():
+        if ok:
+            continue
+        text = why[key]
+        if key == "fixed_dates":
+            text += f": {sorted({i.date_time for i in infos} - {prof['date_time']})[:3]}"
+        if key == "external_attr":
+            seen = sorted({hex(i.external_attr) for i in infos}
+                          - {hex(prof["external_attr"])})
+            text += f": {seen[:3]}, not {hex(prof['external_attr'])}"
+        reasons.append(text)
+    return {**checks, "canonical": not reasons, "reasons": reasons,
+            "members": len(members),
+            "create_versions": sorted({i.create_version for i in infos})}
+
+
+# ── a file set: an entry point and the files it calls ────────────────────────
+#
+# The members of a file set are FOUND, not listed by hand: from the entry
+# point one follows `mtllib` and `map_*` (OBJ) or `buffers` and `images`
+# (glTF), into subfolders too. What nobody calls stays out, and is named. The
+# folder does not delimit the asset: a LOD folder holds eleven tiles.
+
+_ABSOLUTE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/]|[A-Za-z][A-Za-z0-9+.-]*://)")
+
+#: MTL statements that name a file, besides every `map_*`.
+_MTL_FILE_KEYS = ("bump", "disp", "decal", "refl", "norm")
+#: MTL options and how many arguments each takes (`-o`/`-s`/`-t` take one to
+#: three numbers, read greedily).
+_MTL_OPTIONS = {"-blendu": 1, "-blendv": 1, "-boost": 1, "-mm": 2, "-o": 3,
+                "-s": 3, "-t": 3, "-texres": 1, "-clamp": 1, "-bm": 1,
+                "-imfchan": 1, "-type": 1, "-cc": 1}
+
+
+def _is_number(token: str) -> bool:
+    try:
+        float(token)
+        return True
+    except ValueError:
+        return False
+
+
+def _mtl_file(tokens: List[str]) -> Optional[str]:
+    i = 0
+    while i < len(tokens) and tokens[i].startswith("-") \
+            and tokens[i].lower() in _MTL_OPTIONS:
+        count = _MTL_OPTIONS[tokens[i].lower()]
+        i += 1
+        taken = 0
+        while taken < count and i < len(tokens) - 1:
+            if count == 3 and not _is_number(tokens[i]):
+                break
+            i += 1
+            taken += 1
+    rest = " ".join(tokens[i:]).strip()
+    return rest or None
+
+
+def _text_lines(path: str) -> List[str]:
+    with open(path, "rb") as handle:
+        return handle.read().decode("utf-8", errors="replace").splitlines()
+
+
+def _obj_refs(path: str) -> List[str]:
+    refs, here = [], os.path.dirname(path)
+    for line in _text_lines(path):
+        parts = line.strip().split(None, 1)
+        if len(parts) == 2 and parts[0] == "mtllib":
+            whole = parts[1].strip()
+            # one name with spaces (Blender) or several names (the spec)
+            if os.path.isfile(os.path.join(here, whole)) or " " not in whole:
+                refs.append(whole)
+            else:
+                refs.extend(whole.split())
+    return refs
+
+
+def _mtl_refs(path: str) -> List[str]:
+    refs = []
+    for line in _text_lines(path):
+        tokens = line.strip().split()
+        if not tokens:
+            continue
+        key = tokens[0].lower()
+        if key.startswith("map_") or key in _MTL_FILE_KEYS:
+            name = _mtl_file(tokens[1:])
+            if name:
+                refs.append(name)
+    return refs
+
+
+def _gltf_json(path: str) -> Dict[str, Any]:
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    if raw[:4] == b"glTF":
+        length = struct.unpack_from("<I", raw, 12)[0]
+        kind = raw[16:20]
+        if kind != b"JSON":
+            raise ValueError(f"{path}: the first glb chunk is not JSON")
+        raw = raw[20:20 + length]
+    return json.loads(raw.decode("utf-8"))
+
+
+def _gltf_refs(path: str) -> List[str]:
+    from urllib.parse import unquote
+    doc = _gltf_json(path)
+    refs = []
+    for key in ("buffers", "images"):
+        for item in doc.get(key) or []:
+            uri = (item or {}).get("uri")
+            if isinstance(uri, str) and uri and not uri.startswith("data:"):
+                refs.append(unquote(uri))
+    return refs
+
+
+def _refs_of(path: str) -> List[str]:
+    suffix = os.path.splitext(path)[1].lower()
+    if suffix == ".obj":
+        return _obj_refs(path)
+    if suffix == ".mtl":
+        return _mtl_refs(path)
+    if suffix in (".gltf", ".glb"):
+        return _gltf_refs(path)
+    return []
+
+
+def follow_references(entry_point: str) -> Dict[str, Any]:
+    """The members of a file set, found by following its references.
+
+    Returns ``{"members": [{role, path, digest, size_bytes}], "warnings": […],
+    "missing": [paths], "outside": [refs]}``. Paths are relative to the entry
+    point's folder. A reference that is absolute, or climbs out of that folder
+    with ``../``, is not followed and is a warning; a reference to a file that
+    is not there is ``missing`` (a stamp made from this would leave it out, and
+    the verification of an existing stamp names it).
+    """
+    entry = os.path.abspath(entry_point)
+    base = os.path.dirname(entry)
+    found: Dict[str, str] = {}          # relative path → absolute path
+    order = [entry]
+    found[member_path(os.path.basename(entry))] = entry
+    warnings, missing, outside = [], [], []
+    i = 0
+    while i < len(order):
+        current = order[i]
+        i += 1
+        try:
+            refs = _refs_of(current)
+        except (OSError, ValueError) as exc:
+            warnings.append(f"{os.path.relpath(current, base)}: unreadable "
+                            f"({exc})")
+            continue
+        for ref in refs:
+            caller = os.path.relpath(current, base).replace(os.sep, "/")
+            if _ABSOLUTE.match(ref):
+                outside.append(ref)
+                warnings.append(f"{caller}: absolute reference {ref!r} not "
+                                f"followed")
+                continue
+            target = os.path.normpath(os.path.join(os.path.dirname(current),
+                                                   ref.replace("\\", "/")))
+            rel = os.path.relpath(target, base).replace(os.sep, "/")
+            if rel == ".." or rel.startswith("../"):
+                outside.append(ref)
+                warnings.append(f"{caller}: {ref!r} leaves the folder of the "
+                                f"entry point, not followed")
+                continue
+            key = member_path(rel)
+            if key in found or key in missing:
+                continue
+            if not os.path.isfile(target):
+                missing.append(key)
+                warnings.append(f"{caller}: calls {ref!r}, which is not there")
+                continue
+            found[key] = target
+            order.append(target)
+    door = member_path(os.path.basename(entry))
+    members = [{"role": ENTRY_POINT if rel == door else MEMBER, "path": rel,
+                "digest": file_digest(full), "size_bytes": os.path.getsize(full)}
+               for rel, full in found.items()]
+    return {"members": canonical_members(members), "warnings": warnings,
+            "missing": sorted(missing), "outside": outside}
+
+
+def new_file_set_stamp(entry_point: str, resource_id: str, **blocks: Any
+                       ) -> Dict[str, Any]:
+    """A stamp for the file set whose door is ``entry_point``.
+
+    ``self`` carries ``packaging: file_set``, ``digest_covers: members``, the
+    members digest and the list itself (``self.members``). ``blocks`` are the
+    other top-level blocks as they are (``from``, ``how``, ``by``, …).
+    The warnings of the walk ride along as the note ``_followed``, which
+    :func:`write_stamp` drops: they are for the writer, not for the record.
+
+    Refused over :data:`MAX_FILE_SET_MEMBERS`: that is a tree, and a tree is
+    identified by :func:`content_digest`.
+    """
+    followed = follow_references(entry_point)
+    members = followed["members"]
+    if len(members) > MAX_FILE_SET_MEMBERS:
+        raise BadMembers(
+            f"{len(members)} members, over the ceiling of "
+            f"{MAX_FILE_SET_MEMBERS} for a file_set: stamp it as a tree "
+            f"(packaging directory, content_digest)")
+    itself = {"resource_id": str(resource_id),
+              "digest": members_digest(members),
+              "digest_covers": "members",
+              "packaging": "file_set",
+              "members": members,
+              "measures": {"size_bytes": sum(m["size_bytes"] for m in members),
+                           "files": len(members)}}
+    stamp = {"stamp": STAMP_VERSION, "self": itself}
+    stamp.update(blocks)
+    stamp["self"] = {**itself, **(blocks.get("self") or {}), **itself}
+    stamp["_followed"] = {k: followed[k] for k in ("warnings", "missing", "outside")}
+    return stamp
+
+
+def file_set_stamp_path(entry_point: str) -> str:
+    """The sidecar: ONE, beside the door — ``OB_PODIO_LOD1.obj.stamp.json`` —
+    by the rule every stamp already follows (:func:`stamp_filename`)."""
+    return os.path.join(os.path.dirname(os.path.abspath(entry_point)),
+                        stamp_filename({}, asset=os.path.basename(entry_point)))
+
+
+def verify_members(stamp: Dict[str, Any], entry_point: str) -> Dict[str, Any]:
+    """Check a ``file_set`` stamp against the files beside its door.
+
+    ``{"ok", "missing", "changed", "extra", "list_consistent", "warnings"}``:
+    a member that is not there, a member whose bytes changed, a file the entry
+    point now calls and the stamp does not list; and whether ``self.members``
+    still hashes to ``self.digest`` (a hand-edited list does not). A member
+    shared with another file set is checked here like any other: each stamp is
+    verified on its own, and a change to the shared file breaks both.
+    """
+    itself = stamp.get("self") or {}
+    listed = canonical_members(itself.get("members") or [])
+    base = os.path.dirname(os.path.abspath(entry_point))
+    missing, changed = [], []
+    for member in listed:
+        full = os.path.join(base, *member["path"].split("/"))
+        if not os.path.isfile(full):
+            missing.append(member["path"])
+        elif file_digest(full) != member["digest"]:
+            changed.append(member["path"])
+    now = follow_references(entry_point) if os.path.isfile(entry_point) else \
+        {"members": [], "warnings": [f"{entry_point}: the entry point is gone"]}
+    stamped = {m["path"] for m in listed}
+    extra = sorted(m["path"] for m in now["members"] if m["path"] not in stamped)
+    consistent = members_digest(listed) == itself.get("digest")
+    return {"ok": consistent and not (missing or changed or extra),
+            "missing": missing, "changed": changed, "extra": extra,
+            "list_consistent": consistent, "warnings": now["warnings"]}
+
+
+def unclaimed_files(root: str, file_sets: Iterable[Dict[str, Any]], *,
+                    base: Optional[str] = None) -> List[str]:
+    """Files under ``root`` that no file set calls — named, never swept in.
+
+    ``file_sets`` are results of :func:`follow_references` (or stamps), their
+    paths relative to ``base`` (``root`` by default). Stamps and hints are not
+    listed: they are records, not data.
+    """
+    base = os.path.abspath(base or root)
+    claimed = set()
+    for item in file_sets:
+        rows = item.get("members") or (item.get("self") or {}).get("members") or []
+        claimed.update(member_path(m["path"]) for m in rows)
+    out = []
+    for folder, dirs, files in os.walk(root):
+        dirs.sort()
+        for name in sorted(files):
+            if name in SKIP_NAMES or name.endswith((STAMP_SUFFIX, HINTS_SUFFIX)):
+                continue
+            rel = os.path.relpath(os.path.join(folder, name), base)
+            rel = member_path(rel.replace(os.sep, "/"))
+            if rel not in claimed:
+                out.append(rel)
+    return out
+
+
+# ── a tree stamp, and the link between two forms of one content ──────────────
+
+def new_tree_stamp(path: str, resource_id: str, *, computed_by: str = "stamper",
+                   entry_point: Optional[str] = "tileset.json", **blocks: Any
+                   ) -> Dict[str, Any]:
+    """A stamp for a tree: a folder (``packaging: directory``) or a ``.3tz``
+    (``packaging: archive``).
+
+    The folder has no bytes of its own: its ``self.digest`` IS the content
+    digest (``digest_covers: members``). The archive has: ``self.digest`` is
+    the sha256 of the file (``digest_covers: artifact``) and
+    ``self.content_digest`` names the content. Two stamps with the same
+    ``content_digest.digest`` are **two forms of one thing** — the word EMtools
+    uses for its ``_link`` (the tree served) and ``_archive`` (the zip that
+    travels) — and nothing else links them: the equality is the link.
+    """
+    block = content_digest_block(path, computed_by=computed_by,
+                                 entry_point=entry_point)
+    if os.path.isdir(path):
+        itself = {"resource_id": str(resource_id), "digest": block["digest"],
+                  "digest_covers": "members", "packaging": "directory",
+                  "content_digest": block}
+    else:
+        itself = {"resource_id": str(resource_id), "digest": file_digest(path),
+                  "digest_covers": "artifact", "packaging": "archive",
+                  "media_type": MEDIA_TYPE_3TZ, "content_digest": block,
+                  "measures": {"size_bytes": os.path.getsize(path)}}
+    stamp = {"stamp": STAMP_VERSION}
+    stamp.update(blocks)
+    stamp["self"] = {**(blocks.get("self") or {}), **itself}
+    return stamp
+
+
+def same_content(mine: Dict[str, Any], theirs: Dict[str, Any]) -> bool:
+    """Whether two stamps name two forms of the same content: equal
+    ``self.content_digest.digest`` (for a folder, its ``self.digest``)."""
+    def key(stamp):
+        itself = stamp.get("self") or {}
+        block = itself.get("content_digest") or {}
+        if block.get("digest"):
+            return block["digest"]
+        if itself.get("digest_covers") == "members":
+            return itself.get("digest")
+        return None
+    a, b = key(mine), key(theirs)
+    return bool(a) and a == b
+
+
+def verify_tree(stamp: Dict[str, Any], path: str) -> Dict[str, Any]:
+    """Recompute a tree's content digest (and, for an archive, the file's
+    sha256) and compare: ``{"ok", "content", "file"}`` — ``file`` is None for
+    a folder, which has no bytes of its own."""
+    itself = stamp.get("self") or {}
+    expected = (itself.get("content_digest") or {}).get("digest") \
+        or itself.get("digest")
+    content = content_digest(path) == expected
+    file_ok = None
+    if not os.path.isdir(path):
+        file_ok = file_digest(path) == itself.get("digest")
+    return {"ok": content and file_ok is not False, "content": content,
+            "file": file_ok}
+
+
+# ── a datablock: an object inside a .blend, which has no bytes of its own ────
+
+BLEND_SCHEME = "blend://"
+
+
+def blend_locator(blend_path: str, datablock_type: str, name: str) -> str:
+    """``blend://<path>#<Type>/<name>``, percent-encoded — the form of
+    s3Dgraphy's ``make_blend_locator`` (``resources/resolver.py``), copied and
+    pinned by a conformance case so the two cannot drift."""
+    from urllib.parse import quote
+    if not blend_path or not name:
+        return ""
+    return (BLEND_SCHEME + quote(str(blend_path), safe="/")
+            + "#" + quote(str(datablock_type or "Object"), safe="")
+            + "/" + quote(str(name), safe=""))
+
+
+def parse_blend_locator(locator: str) -> Optional[Tuple[str, str, str]]:
+    """``(path, type, name)`` from a ``blend://`` locator, or None."""
+    from urllib.parse import unquote
+    text = (locator or "").strip()
+    if not text.lower().startswith(BLEND_SCHEME):
+        return None
+    rest = text[len(BLEND_SCHEME):]
+    if "#" not in rest:
+        return None
+    path, fragment = rest.split("#", 1)
+    if "/" not in fragment:
+        return None
+    kind, name = fragment.split("/", 1)
+    if not path or not name:
+        return None
+    return unquote(path), unquote(kind), unquote(name)
+
+
+def new_datablock_stamp(resource_id: str, blend_path: str, name: str, *,
+                        datablock_type: str = "Object",
+                        structural_digest: Optional[str] = None,
+                        machine: Optional[str] = None, when: Optional[str] = None,
+                        **blocks: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """A stamp and its hints for a datablock (``packaging: datablock``).
+
+    **There is no digest of bytes**, and the stamp says so the way the format
+    already does: ``self.digest`` is an ``emstruct1:`` fingerprint when the
+    caller computed one (comparable, never verifiable), or absent. The
+    ``blend://`` locator is a PATH, so it does not go in the stamp: it is a
+    private hint, keyed by the fingerprint (or by the resource id when there is
+    none).
+    """
+    itself: Dict[str, Any] = {"resource_id": str(resource_id),
+                              "packaging": "datablock"}
+    if structural_digest:
+        scheme, _ = split_identity(structural_digest)
+        if scheme not in COMPARABLE_SCHEMES:
+            raise ValueError(f"a datablock's digest is structural "
+                             f"({'/'.join(COMPARABLE_SCHEMES)}:…), got "
+                             f"{structural_digest!r}")
+        itself["digest"] = structural_digest
+        itself["digest_covers"] = "artifact"
+    stamp = {"stamp": STAMP_VERSION}
+    stamp.update(blocks)
+    stamp["self"] = {**(blocks.get("self") or {}), **itself}
+    hints = new_hints(structural_digest or str(resource_id))
+    note_seen(hints, blend_locator(blend_path, datablock_type, name),
+              kind="blend", scope="private", machine=machine, when=when)
+    return stamp, hints
+
+
 __all__ = [
     "ALREADY_WALKED", "BadStamp", "CEILING", "COMPARABLE", "COMPARABLE_SCHEMES",
     "DESCRIPTION_HINT_CHARS", "Disagreement", "HINTS_SUFFIX", "HINTS_VERSION", "KNOWN_KINDS", "NOT_A_FILE",
@@ -940,4 +1761,14 @@ __all__ = [
     "stamp_identity", "stamp_title",
     "stamps_agree", "substance", "validate_stamp", "walk_chain", "write_hints",
     "write_public_hints", "write_stamp",
+    # the resource of more than one file (21-10-2026)
+    "BLEND_SCHEME", "BadMembers", "COMPUTED_BY", "CANONICAL_3TZ", "DIGEST_COVERS",
+    "ENTRY_POINT", "INDEX_NAME_3TZ", "MAX_FILE_SET_MEMBERS", "MEDIA_TYPE_3TZ",
+    "MEMBER", "MEMBER_ROLES", "MEMBERS_EOL", "MEMBERS_SEPARATOR", "PACKAGINGS",
+    "SKIP_NAMES", "blend_locator", "canonical_members", "content_digest",
+    "content_digest_block", "file_set_stamp_path", "follow_references",
+    "is_canonical_3tz", "member_path", "members_canonical", "members_digest",
+    "new_datablock_stamp", "new_file_set_stamp", "new_tree_stamp",
+    "parse_blend_locator", "same_content", "tree_members", "unclaimed_files",
+    "verify_members", "verify_tree",
 ]

@@ -1,4 +1,4 @@
-# Il timbro — formato deciso (14-09-2026, revisione 04-10-2026)
+# Il timbro — formato deciso (14-09-2026, revisioni 04-10-2026 e 21-10-2026)
 
 > **Nota sulla lingua.** Questa specifica è in italiano perché è nata così, e
 > muoverla di repo non è il momento di riscriverla: una traduzione fatta di
@@ -116,8 +116,9 @@ differiscono solo nell'istante sono lo stesso fatto registrato due volte, e si d
 
 ### Le scelte che non sono ovvie
 
-`digest_covers` dichiara cosa il digest copre — `artifact` (i byte come usciti dal processo) o `payload` (il
-contenuto al netto del timbro, quando il timbro vive dentro il vascello). Stessa disciplina del `checksum_of`
+`digest_covers` dichiara cosa il digest copre — `artifact` (i byte come usciti dal processo), `payload` (il
+contenuto al netto del timbro, quando il timbro vive dentro il vascello) o, dal 21-10-2026, `members` (la lista
+dei membri di una risorsa di più file: vedi «La risorsa di più file»). Stessa disciplina del `checksum_of`
 del tileset: il digest **dice** cosa copre invece di lasciarlo intuire.
 
 **`self.label` e `self.description` sono il titolo e la descrizione** (04-10-2026, decisione di E.D. del
@@ -237,6 +238,121 @@ cancello vivo sta altrove.
 
 `registry` è un **indizio per ritrovare, non un'autorità**, e porta la `revision`, che è ciò che rende citabile
 qualcosa che non cambia sotto i piedi.
+
+## La risorsa di più file (21-10-2026)
+
+Decisione di E.D. del 30-09-2026: la risorsa è **l'insieme**, ogni file ne è un
+**membro**. Un OBJ non è un file: è l'obj, il mtl che chiama e le texture che il
+mtl chiama, e il digest del solo obj direbbe «sono quei byte» di un terzo della
+cosa. Da qui tre aggiunte a `self`, tutte **facoltative e additive**.
+
+### `self.packaging`: un vocabolario
+
+`file` · `file_set` · `directory` · `archive` · `datablock`. Misurato: sono i
+`PACKAGINGS` della risorsa in s3Dgraphy (30-09-2026), e nel corpus c'erano solo
+`file` e `datablock`. Un valore fuori elenco **si conserva e non si rifiuta**:
+l'elenco serve a far concordare chi scrive, non a buttare un verbale.
+
+### `digest_covers: members` e la forma canonica della lista
+
+`digest_covers` prende un terzo valore: `artifact`, `payload`, **`members`** —
+il digest copre **la lista dei membri**, non i byte di un file. La lista, fissata
+byte per byte:
+
+* una riga per membro: `ruolo` NUL `percorso` NUL `sha256:<hex>` LF;
+* **NUL** (U+0000) separa i campi perché è l'unico carattere che nessun file
+  system ammette in un percorso: uno spazio o un apostrofo in un nome non
+  spezzano mai un campo. I caratteri di controllo in un percorso si
+  **rifiutano**;
+* ruolo `entry_point` (uno al più) o `member`, le parole di `has_file` in
+  s3Dgraphy;
+* percorso normalizzato: barre in avanti, nessuna barra iniziale, **UTF-8 NFC**;
+  si rifiutano un percorso vuoto, un segmento vuoto, `.` o `..`, e un percorso
+  ripetuto;
+* hex minuscolo; solo `sha256:` (un membro deve essere verificabile);
+* righe in ordine dei **byte UTF-8** del percorso; **LF** dopo ogni riga,
+  l'ultima compresa; nient'altro (la dimensione non entra: discende dai byte).
+
+Il digest è lo sha256 di quel testo, scritto `sha256:<hex>`: verificabile come
+ogni altro, perché chiunque ha la lista rifà il conto. Il caso `18` della
+conformità fissa i byte.
+
+Per un **`file_set`** la lista sta **dentro il timbro**, in `self.members`
+(`[{role, path, digest, size_bytes}]`), perché i file sono pochi: un **tetto di
+64** (misurato: TempluMare ha 3 membri al LOD1/LOD2 e 6 al LOD0); oltre, è un
+albero. I membri **si trovano, non si elencano a mano**: dall'entry point si
+seguono `mtllib` e `map_*` (con le loro opzioni, `bump`/`disp`/`decal`/`refl`
+comprese) per l'OBJ, `buffers` e `images` per il glTF (e il blocco JSON del
+glb), anche in sottocartelle. Un riferimento assoluto o che esce dalla cartella
+dell'entry point con `../` non si segue e dà un avviso; un file che nessuno
+chiama resta fuori e **si elenca** (al LOD1 di TempluMare: le due `cc_T_*.png`).
+**Il sidecar è uno, accanto alla porta**, con la regola di sempre:
+`OB_PODIO_LOD1.obj.stamp.json`.
+
+La verifica dice tre cose distinte: un membro **mancante**, **cambiato**, **in
+più** (l'entry point ora chiama un file che la lista non ha), e se
+`self.members` rifà ancora `self.digest`. Un membro in due risorse (una texture
+condivisa) è **permesso**: ogni timbro si verifica da solo, e cambiare la
+texture rompe tutti e due.
+
+### `self.content_digest`: l'identità del contenuto di un albero
+
+Per un albero — una cartella, o la stessa in un `.3tz` — **la stessa forma**,
+con tutti i file dell'albero, ruolo `member` tranne `tileset.json` alla radice
+che è `entry_point`, esclusi `.DS_Store`, `Thumbs.db` e l'indice del 3tz. La
+lista **non** si scrive nel timbro (i file sono migliaia):
+
+```json
+"content_digest": { "digest": "sha256:8aa6fb…", "files": 7302,
+                    "computed_by": "producer" }
+```
+
+`computed_by` è `producer` (chi ha fatto l'albero, all'export) o `stamper` (chi
+l'ha timbrato dopo, su byte che potevano essere già stati toccati). Nella
+sostanza entra solo `digest`.
+
+**Un tileset ha due identità.** Il timbro del `.3tz` porta lo sha256 del file
+come `self.digest` (`digest_covers: artifact`, `packaging: archive`) e il
+`content_digest` come identità del contenuto. Il timbro della cartella
+(`packaging: directory`) non ha byte suoi: il suo `self.digest` **è** il
+contenuto (`digest_covers: members`), con lo stesso blocco `content_digest`
+accanto. **Due timbri con lo stesso `content_digest.digest` sono due forme della
+stessa cosa**: la parola è quella di EMtools, che per un tileset scrive due
+distribution, `…_link` (l'albero servito, `directory`) e `…_archive` (lo zip che
+viaggia, `archive`), «due forme della stessa cosa, ciascuna col suo checksum»
+(`resource_levels.py`). Misurato: in EMtools le due forme **non hanno un legame
+diretto** — discendono dagli stessi master — e il `_link` porta il digest della
+sola porta (`checksum_of: entry-point`). Qui il legame è l'uguaglianza, e nessun
+campo in più.
+
+Il `content_digest` lo calcola **chi produce** (3DSC, EMStudio: hanno i file in
+mano), letto a blocchi; per un `.3tz` si legge **dall'indice senza estrarre**. Una
+cartella e il suo `.3tz` danno lo stesso valore qualunque siano date, attributi
+o compressione dell'archivio. Misurato su TempluMare (`RM/`): il `.3tz` (sha256
+`232dfcbc…`) e la cartella danno `sha256:8aa6fbd3…caed`, 7302 file.
+
+Il `.3tz` ha **un solo profilo canonico**, quello di 3DSC, scritto in
+[`profiles/3tz.md`](profiles/3tz.md): solo un archivio canonico ha uno sha256
+che nomina il contenuto e non il momento dell'impacchettamento.
+
+### Il datablock
+
+`packaging: datablock` è un oggetto dentro un `.blend` e **non ha un digest dei
+byte**: `self.digest` è un'impronta `emstruct1:` (confronta, non prova) quando
+chi timbra l'ha calcolata, o manca. Il locator `blend://<percorso>#<Tipo>/<nome>`
+(la forma di `make_blend_locator` in s3Dgraphy, `resources/resolver.py`) è un
+**percorso**, quindi **non sta nel timbro**: è una pista, `kind: blend`,
+`scope: private`. Il caso `22` fissa la codifica.
+
+### La versione del formato non cambia
+
+`STAMP_VERSION` resta **1**, perché nulla di ciò che era valido smette di
+esserlo e il validatore non chiede niente di nuovo: `self.members`,
+`self.content_digest` e il terzo valore di `digest_covers` sono campi che un
+lettore vecchio conserva senza capirli. Il rischio di un lettore vecchio è uno
+solo, ed è **rumoroso, non silenzioso**: ignorando `digest_covers` proverebbe a
+verificare un digest di lista come i byte di un file, e fallirebbe — un falso
+«cambiato», mai un falso «è lui».
 
 ## Le piste — file separato, mutevole, mai coperto dal digest
 

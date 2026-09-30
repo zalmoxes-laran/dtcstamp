@@ -19,6 +19,14 @@ Every file is one JSON object. Three kinds, told apart by which key they carry:
 | `stamp` | one stamp: is it valid, how strong is its identity, does its empty parent list mean «born here» |
 | `pair` | two stamps for the same artifact: do they agree, and if not exactly where |
 | `stamp` + `resolvable` | a **walk**: `resolvable` is the world the resolver can see, keyed by digest |
+| `members` | the **canonical list** of a resource of more than one file, byte for byte |
+| `file_set` | an entry point and its files (`files`, written to a temporary folder): which members following the references finds |
+| `tree` | a tileset as a folder (`files`) and as a `.3tz` (`archive`, a file under `data/`): one content digest for both |
+| `stamp` + `blend` | a datablock, and the exact `blend://` locator for `blend.path` / `type` / `name` |
+
+`files` maps a path (forward slashes) to `{"text": …}` (UTF-8) or
+`{"base64": …}`. The binary archives live in `data/` and are referenced by a
+path relative to this folder; they are fixtures, not cases.
 
 `case` and `why` are prose for a human reading a failure at three in the morning.
 `expect` is what an implementation has to produce.
@@ -41,6 +49,31 @@ Every file is one JSON object. Three kinds, told apart by which key they carry:
 | `walk_rungs` / `walk_reached` / `walk_unreached` | how far the ascent got |
 | `walk_why` | the sorted, deduplicated reasons the unreached rungs were not reached |
 | `walk_truncated` | whether the ceiling stopped it rather than the data |
+| `packaging` | `self.packaging` as read |
+| `members_canonical` | the canonical text (NUL separators, LF after every line) |
+| `members_digest` | `sha256:` of that text |
+| `canonical_members` / `members` | the normalised, sorted list `[{role, path, digest, size_bytes?}]` |
+| `unclaimed` / `warnings` | files in the folder nobody calls; the warnings of the walk |
+| `archive_sha256` | the sha256 of the `.3tz` file |
+| `content_digest` / `files` | the identity of the tree's content, and how many files — the SAME for the folder and the archive |
+| `canonical` / `failed_criteria` / `reasons_contain` | what `is_canonical_3tz` says, which criteria fail, fragments its reasons must carry |
+| `blend_locator` / `hint_kind` / `hint_scope` | the locator string, and how a hint for it is classified |
+
+## The case every 3tz writer reproduces
+
+`20-tileset-folder-and-3tz.json` is the common case of the one `.3tz` profile
+(`../profiles/3tz.md`, 3DSC's). To check a writer — 3DSC, EMStudio, anybody:
+
+1. write every entry of `tree.files` into an empty folder (base64-decoded, or
+   the `text` as UTF-8), paths as given;
+2. pack that folder with your writer;
+3. the sha256 of your archive must be `expect.archive_sha256`, and its content
+   digest `expect.content_digest` — which is also the folder's.
+
+A writer that gets the content digest right and the archive sha256 wrong writes
+a valid 3tz that is **not canonical**: its bytes name the moment of packing. Case
+`21` is exactly that archive, from `3d-tiles-tools` 0.5.4. Measured on 30-09-2026:
+3DSC's `archive_3tz.write_3tz` (commit `1430128`) reproduces case 20.
 
 ## Adding a case
 

@@ -1,0 +1,32 @@
+{
+ "case": "a .3tz written by 3d-tiles-tools 0.5.4: not canonical, same content",
+ "why": "Every entry carries the time of writing and the DOS archive bit (0x81a40020): two packings of one folder give two file digests. The content digest does not care — it is the canonical one's — and that is exactly why a tileset needs both identities.",
+ "tree": {
+  "files": {
+   "Data/c01/e0001.b3dm": {
+    "base64": "YjNkbQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+   },
+   "Data/c02/e0002.b3dm": {
+    "base64": "YjNkbQICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIC"
+   },
+   "tileset.json": {
+    "text": "{\"asset\": {\"version\": \"1.0\"}, \"geometricError\": 10, \"root\": {\"content\": {\"uri\": \"Data/c01/e0001.b3dm\"}, \"geometricError\": 1, \"refine\": \"REPLACE\", \"boundingVolume\": {\"sphere\": [0, 0, 0, 10]}}}"
+   }
+  },
+  "archive": "data/small-tileset-3d-tiles-tools.3tz"
+ },
+ "expect": {
+  "archive_sha256": "sha256:f2f020c8b840334f6ec09769b4f3c2295ef26dcd108ee2dc434a753342c9f269",
+  "content_digest": "sha256:fefca8bcbc5a4f20573a8134d9c7c631dddb84c6dd40d664c7a25f9bc33373a8",
+  "canonical": false,
+  "failed_criteria": [
+   "canonical",
+   "external_attr",
+   "fixed_dates"
+  ],
+  "reasons_contain": [
+   "1980-01-01",
+   "0x81a40020"
+  ]
+ }
+}

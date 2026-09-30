@@ -1,0 +1,44 @@
+{
+ "case": "the canonical list of members, byte for byte",
+ "why": "The identity of a resource of more than one file is the sha256 of this text. Two implementations that differ on one separator, on NFC, on the sort or on the last newline disagree on every identity, silently. The input is deliberately untidy: a backslash, a leading slash, a decomposed é, upper-case hex, and not in order.",
+ "members": [
+  {
+   "role": "member",
+   "path": "textures\\Café.png",
+   "digest": "sha256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+  },
+  {
+   "role": "entry_point",
+   "path": "/model.obj",
+   "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "size_bytes": 10
+  },
+  {
+   "role": "member",
+   "path": "model.mtl",
+   "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+ ],
+ "expect": {
+  "members_canonical": "member\u0000model.mtl\u0000sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\nentry_point\u0000model.obj\u0000sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nmember\u0000textures/Café.png\u0000sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+  "members_digest": "sha256:bc849b39ed3ca381a82617fd8d24685ae248dc41c882c0f3987bbd5412c587f5",
+  "canonical_members": [
+   {
+    "role": "member",
+    "path": "model.mtl",
+    "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+   },
+   {
+    "role": "entry_point",
+    "path": "model.obj",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "size_bytes": 10
+   },
+   {
+    "role": "member",
+    "path": "textures/Café.png",
+    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+   }
+  ]
+ }
+}
