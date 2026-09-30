@@ -11,6 +11,15 @@ not changed the format.
 
 ## [Unreleased]
 
+### Changed — the vocabulary of `dtc_kind` (spec text, 30-09-2026)
+- `stamp-format.md` no longer says that «decimation» is not part of the
+  vocabulary: since s3Dgraphy's `em_visual_rules` 1.6.22 it is a `process`
+  kind, with georeferencing, format_conversion, classification and
+  vectorization. The spec now lists the two axes a stamp uses — `acquisition`
+  (capture / retrieval) and `process` — and says where a capture's kind goes
+  (`how.dtc_kind`). The example uses `dtc_kind: "decimation"`. Text only: the
+  format, `STAMP_VERSION` and the conformance vectors are unchanged.
+
 ### Added — the title and the description (spec revision 04-10-2026)
 - `self.label` (the title) and `self.description`, both optional: a stamp
   without them is as valid as before and `STAMP_VERSION` stays 1. The title is

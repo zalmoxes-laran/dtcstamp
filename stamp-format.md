@@ -82,8 +82,8 @@ differiscono solo nell'istante sono lo stesso fatto registrato due volte, e si d
   ],
   "how": {
     "process_id": "proc:d41e…",
-    "dtc_kind": "transformation",
-    "technique": "decimation",
+    "dtc_kind": "decimation",
+    "technique": "quadric edge collapse",
     "parameters": { "target_faces": 50000, "preserve_boundary": true },
     "software": [
       { "name": "EM Tools", "version": "1.6.0-dev.8", "commit": "9555447" },
@@ -146,8 +146,8 @@ Il software sta in `how`, non in `by`, perché è un parametro a tutti gli effet
 versioni non produce gli stessi byte — e porta **il commit**, non solo la versione: «EM Tools 1.6» non dice
 quale build.
 
-`technique` e `parameters` sono separati: «decimation» è la tecnica, `target_faces 50000` è come è stata
-applicata. Serve a interrogare la tecnica senza interpretare i parametri.
+`technique` e `parameters` sono separati: «quadric edge collapse» è la tecnica, `target_faces 50000` è come è
+stata applicata. Serve a interrogare la tecnica senza interpretare i parametri.
 
 `from` porta **`size_bytes`**, e non è ridondanza: è ciò che rende economica la **ricerca di un genitore**.
 Riconoscere un file costa poco perché il suo timbro dichiara la dimensione e il filtro scarta senza leggere un
@@ -160,10 +160,25 @@ ingresso legittimo e **non ha byte da hashare**. `kind: "acquisition"` lo dichia
 che sia un difetto.
 
 **`dtc_kind` e `technique` sono due granularità, non due nomi.** `dtc_kind` viene dal vocabolario controllato
-(`photogrammetry`, `transformation`, …) ed è l'asse su cui si interroga; `technique` è la parola libera di chi
-ha fatto il gesto — «decimation» non sta nel vocabolario e non ci deve entrare. Senza `dtc_kind` il giro
-completo perde un campo che il costruttore valida. **Il vocabolario non si allarga da un file arrivato da
-fuori**: un genere sconosciuto cade sul default.
+ed è l'asse su cui si interroga; `technique` è la parola libera di chi ha fatto il gesto («quadric edge
+collapse», «Metashape high»). Senza `dtc_kind` il giro completo perde un campo che il costruttore valida.
+**Il vocabolario non si allarga da un file arrivato da fuori**: un genere sconosciuto cade sul default.
+
+Il vocabolario è quello di `dtc_kinds` in `em_visual_rules.json` di s3Dgraphy (**1.6.22**, 30-09-2026: la
+decimazione, che fino ad allora era solo una `technique`, è entrata come genere). Per un timbro contano due
+assi:
+
+* **`acquisition`** — l'ingresso di un materiale nello studio, in due famiglie. La **cattura**: l'oggetto è
+  FATTO dall'atto (`photo`, `laserscanner`, `topographic`, `gnss_survey`, `field_drawing`,
+  `recording_sheet`). Il **recupero**: arriva già fatto, opaco (`download`, `local_import`, `uri_reference`,
+  `ingest`). La famiglia si legge dal vocabolario e non si scrive nel timbro. Un'acquisizione ha `from: []`.
+* **`process`** — la genesi da genitori: `photogrammetry`, `transformation`, e dal 1.6.22 `decimation`,
+  `georeferencing`, `format_conversion`, `classification`, `vectorization`.
+
+Un timbro d'origine di una cattura scrive il genere in `how.dtc_kind` (`"photo"`), non altrove: la forma
+provvisoria che lo metteva in `how.acquisition.capture` accanto a un `local_import` segnaposto si legge ancora,
+ma non si emette. L'asse `input`, che fino al 1.6.21 ospitava le catture, resta solo come alias in lettura.
+`dtcstamp` non valida i generi (non conosce vocabolari): il vocabolario lo applica chi costruisce il grafo.
 
 **`how.acquisition` è la casa dei fatti dell'atto di acquisizione** — apparecchio, obiettivo, campagna,
 condizioni — e non vanno in `parameters`, che vuol dire «come la tecnica è stata applicata». È la distinzione
