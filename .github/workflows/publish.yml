@@ -85,6 +85,13 @@ jobs:
     needs: [suite, zero-dependencies]
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    # Trusted publishing (OIDC), come s3Dgraphy: nessun token nei secrets.
+    # `id-token: write` permette all'action di chiedere a GitHub un token a vita
+    # breve che PyPI accetta solo da questo repo e da questo workflow; con lui
+    # arriva anche la provenance (attestazione PEP 740).
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
     - name: Checkout specific tag
@@ -139,11 +146,8 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
         skip-existing: true
 
     - name: Publish to PyPI (PRODUCTION)
       if: github.event.inputs.target == 'pypi'
       uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_API_TOKEN }}

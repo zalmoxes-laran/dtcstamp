@@ -7,3 +7,8 @@ dist/
 
 # bump_and_push.sh usa `sed -i.bak`: se muore a meta, i .bak restano
 *.bak
+
+.cowork-work/
+
+# AI dev-loop planning (not shipped)
+.claude/
