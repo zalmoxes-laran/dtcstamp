@@ -64,7 +64,7 @@ from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
 #: has already written.
 PACKAGE = "dtcstamp"
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 #: The stamp format version. A record that declares another one is not broken:
 #: it is from another epoch, and is refused with that word.
