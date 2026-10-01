@@ -1,0 +1,55 @@
+{
+ "case": "the same operator, named and entered two ways",
+ "why": "by.operator enters the substance by id: its label is a courtesy, and auth (orcid · node_password · declared) says how the operator had entered, not who. The same person exporting the same bytes once from a declared identity and once through a room has not contradicted herself. Another id would be a disagreement.",
+ "pair": [
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "packaging": "file"
+   },
+   "from": [],
+   "how": {
+    "dtc_kind": "export"
+   },
+   "by": {
+    "operator": {
+     "id": "https://orcid.org/0000-0002-1825-0097",
+     "label": "Emanuel Demetrescu",
+     "auth": {
+      "mode": "declared"
+     }
+    },
+    "at": "2026-11-01T10:00:00Z"
+   }
+  },
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:x",
+    "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "packaging": "file"
+   },
+   "from": [],
+   "how": {
+    "dtc_kind": "export"
+   },
+   "by": {
+    "operator": {
+     "id": "https://orcid.org/0000-0002-1825-0097",
+     "label": "E. Demetrescu",
+     "auth": {
+      "mode": "node_password",
+      "attested_by": "fcn-prova"
+     }
+    },
+    "at": "2026-11-01T10:00:00Z"
+   }
+  }
+ ],
+ "expect": {
+  "agree": true,
+  "disagreements": []
+ }
+}

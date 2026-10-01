@@ -35,11 +35,17 @@ touching it. By the rule at the top of this file, neither moves.
   one key per parent `resource_id`: `note_parent_seen`, `parent_hints`.
   `for_export` lets out only their public hints, never the machine;
   `private_locators` lists theirs too. No `<asset>.from.hints.json`.
+- `by.operator.auth` — how the operator had entered: `orcid`,
+  `node_password` (+ `attested_by`) or `declared` (a local identity nobody
+  checked). Optional. **Changed**: the operator enters `substance` by its `id`
+  alone — before, the whole object (label included) did, so the same person
+  named twice differently read as a contradiction, against the rule that a
+  label is a courtesy. Conformance case 27.
 - The spec lists `export`, `lod_generation`, `tiling`, `packing` among the
   `process` kinds (s3Dgraphy `em_visual_rules` 1.6.29). dtcstamp still does
   not validate kinds.
 - Conformance cases 24 (a parent's state), 25 (a revision), 26 (a pair that
-  differs only in those two, and agrees); the runner reads `parent_0_state`
+  differs only in those two, and agrees), 27 (the operator by id); the runner reads `parent_0_state`
   and `revision_of` after a write and a read.
 
 ## [0.1.2] — YYYY-MM-DD <!-- the date is written when the tag is made -->

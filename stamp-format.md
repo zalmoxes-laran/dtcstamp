@@ -238,6 +238,14 @@ dichiarato e non da chi. Vale anche qui la regola delle etichette: una `label` c
 `by.operator` **può mancare**: quando manca, l'agente è il software nominato in `how`. Una regola sola, nessuna
 ridondanza — è il caso del bake in batch, del servizio, del chatbot che produce risorse.
 
+**`by.operator.auth`** (01-11-2026, facoltativo) dice **come** l'operatore era entrato: `{"mode": "orcid"}`
+(verificato da ORCID), `{"mode": "node_password", "attested_by": <nodo>}` (attestato da un nodo, sul campo) o
+`{"mode": "declared"}` (un iD scritto nelle preferenze di uno strumento e non controllato da nessuno: l'identità
+locale di EM Tools e di EMStudio). Sono le parole delle firme di s3Dgraphy (`created_auth`…). Dice quanto è forte
+il nome, non chi è: nella sostanza l'operatore entra **per `id`**, e né la sua `label` né `auth` vi entrano —
+la stessa persona che esporta gli stessi byte una volta da dichiarata e una volta in una stanza non si contraddice
+(caso `27`).
+
 `declared` è **storia, non regola**: licenza ed embargo come dichiarati allora, con `as_of` a dirlo. Il
 cancello vivo sta altrove.
 
@@ -444,7 +452,9 @@ Perché qui e non in un file `<asset>.from.hints.json` (la proposta di EM Tools 
 legge più un file nuovo. Misurato: la 0.1.2 di PyPI, con il proprio runner, passa i casi `24`–`26` (valida il
 timbro, legge il genitore, riscrive senza perdere `state` e `was_revision_of`), e il suo `note_seen` riscrive un
 registro con `from` senza toccarlo. Il solo effetto di un lettore vecchio è sul verso sicuro: il suo
-`for_export` non lascia uscire le piste dei genitori, nemmeno quelle pubbliche.
+`for_export` non lascia uscire le piste dei genitori, nemmeno quelle pubbliche. E un confronto: la 0.1.2 mette
+nella sostanza l'operatore intero, quindi sul caso `27` vede una contraddizione dove non c'è (misurato) — un falso
+«non concordano», mai un falso «concordano»; leggere il file lo legge.
 
 ## Le piste — file separato, mutevole, mai coperto dal digest
 

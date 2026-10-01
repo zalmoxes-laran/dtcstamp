@@ -1037,6 +1037,25 @@ class TheRevision(unittest.TestCase):
         self.assertTrue(S.stamps_agree(a, b))
 
 
+class TheOperatorByIdentity(unittest.TestCase):
+
+    def _stamp(self, operator):
+        return {"stamp": 1, "self": {"resource_id": "r", "digest": SHA("1")},
+                "how": {"dtc_kind": "export"}, "by": {"operator": operator}}
+
+    def test_label_and_auth_are_not_substance(self):
+        a = self._stamp({"id": "https://orcid.org/0000-0002-1825-0097", "label": "E.D.",
+                         "auth": {"mode": "declared"}})
+        b = self._stamp({"id": "https://orcid.org/0000-0002-1825-0097",
+                         "auth": {"mode": "orcid"}})
+        self.assertTrue(S.stamps_agree(a, b))
+
+    def test_THE_COUNTEREXAMPLE_another_id_disagrees(self):
+        a = self._stamp({"id": "https://orcid.org/0000-0002-1825-0097"})
+        b = self._stamp({"id": "https://orcid.org/0000-0001-5109-3700"})
+        self.assertEqual([d.path for d in S.compare_stamps(a, b)], ["by.operator"])
+
+
 class TheParentsHints(unittest.TestCase):
 
     def _register(self):

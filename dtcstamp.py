@@ -498,8 +498,16 @@ def substance(stamp: Dict[str, Any]) -> Dict[str, Any]:
     out["how.software"] = (sorted(_canonical(s) for s in software)
                            if isinstance(software, list) else None)
 
+    # The operator BY IDENTITY (01-11-2026): its `label` is a courtesy like
+    # every label, and `auth` — how the operator had entered (orcid,
+    # node_password, declared) — says how strong the name is, not who: the
+    # same person exporting the same bytes once declared and once through a
+    # room has not contradicted herself.
     operator = by.get("operator")
-    out["by.operator"] = _canonical(operator) if operator else None
+    if isinstance(operator, dict):
+        out["by.operator"] = str(operator.get("id") or "") or None
+    else:
+        out["by.operator"] = _canonical(operator) if operator else None
 
     out["declared.license"] = declared.get("license")
     out["declared.embargo_until"] = declared.get("embargo_until")
