@@ -121,6 +121,17 @@ class Corpus(unittest.TestCase):
                              expect["description"])
         if "receipt" in expect:
             self.assertEqual(S.receipt(validated), expect["receipt"])
+        if "parent_0_state" in expect or "revision_of" in expect:
+            # read AFTER a round trip: kept on read and dropped on write is lost
+            with tempfile.TemporaryDirectory() as tmp:
+                target = str(pathlib.Path(tmp) / "x.stamp.json")
+                S.write_stamp(validated, target)
+                back = S.read_stamp(target)
+            if "parent_0_state" in expect:
+                self.assertEqual(S.parent_state((back.get("from") or [])[0]),
+                                 expect["parent_0_state"])
+            if "revision_of" in expect:
+                self.assertEqual(S.revision_of(back), expect["revision_of"])
         for path in expect.get("preserved", []):
             # THE ROUND TRIP, not just the read: an implementation that keeps a
             # field on read and drops it on write loses it just the same.
@@ -949,6 +960,127 @@ class Datablocks(unittest.TestCase):
     def test_a_byte_digest_is_refused_for_a_datablock(self):
         with self.assertRaises(ValueError):
             S.new_datablock_stamp("res:ob", "a.blend", "OB", structural_digest=SHA("1"))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE STEP BORN IN AN AUTHORING TOOL (01-11-2026)
+# ═════════════════════════════════════════════════════════════════════════════
+
+BLEND_LOCATOR = "blend:///Users/mrossi/lavori/scavo.blend#Object/TILE"
+
+
+class TheParentsState(unittest.TestCase):
+
+    def test_written_and_read_back(self):
+        entry = S.with_parent_state({"resource_id": "blend:1"}, fingerprint="struct:f=6",
+                                    sha256=SHA("f"), saved=True)
+        self.assertEqual(S.parent_state(entry),
+                         {"fingerprint": "struct:f=6", "sha256": SHA("f"), "saved": True})
+
+    def test_THE_COUNTEREXAMPLE_a_container_digest_that_is_not_one(self):
+        with self.assertRaises(ValueError):
+            S.with_parent_state({}, sha256="md5:abc")
+        with self.assertRaises(ValueError):
+            S.with_parent_state({}, saved="yes")
+
+    def test_a_wrong_shape_is_left_out_of_the_reading_not_refused(self):
+        entry = {"resource_id": "blend:1",
+                 "state": {"sha256": "nope", "saved": "no", "fingerprint": "struct:f=1"}}
+        self.assertEqual(S.parent_state(entry), {"fingerprint": "struct:f=1"})
+        S.validate_stamp({"stamp": 1, "self": {"resource_id": "r"}, "from": [entry]})
+
+    def test_the_spelling_of_the_first_day_is_read(self):
+        entry = {"state": {"blend": SHA("f"), "blend_saved": False}}
+        self.assertEqual(S.parent_state(entry), {"sha256": SHA("f"), "saved": False})
+
+    def test_the_state_is_not_substance(self):
+        a = {"stamp": 1, "self": {"resource_id": "r", "digest": SHA("1")},
+             "from": [S.with_parent_state({"resource_id": "blend:1"}, saved=False)],
+             "how": {"dtc_kind": "export"}}
+        b = json.loads(json.dumps(a))
+        b["from"][0]["state"] = {"saved": True, "sha256": SHA("2")}
+        self.assertTrue(S.stamps_agree(a, b))
+        # …and the COUNTEREXAMPLE: another parent is a disagreement
+        b["from"][0]["resource_id"] = "blend:2"
+        self.assertFalse(S.stamps_agree(a, b))
+
+
+class TheRevision(unittest.TestCase):
+
+    def _stamp(self, digest, rid="res:new"):
+        return {"stamp": 1, "self": {"resource_id": rid, "digest": digest}}
+
+    def test_marked_from_the_previous_stamp(self):
+        new = S.mark_revision(self._stamp(SHA("2")), self._stamp(SHA("1"), "res:old"))
+        self.assertEqual(S.revision_of(new), {"resource_id": "res:old", "digest": SHA("1")})
+
+    def test_THE_COUNTEREXAMPLE_the_same_bytes_are_not_a_revision(self):
+        with self.assertRaises(ValueError):
+            S.mark_revision(self._stamp(SHA("1")), self._stamp(SHA("1"), "res:old"))
+
+    def test_a_bare_id_is_read_and_nonsense_is_not(self):
+        stamp = self._stamp(SHA("2"))
+        stamp["self"]["was_revision_of"] = "res:old"
+        self.assertEqual(S.revision_of(stamp), {"resource_id": "res:old"})
+        stamp["self"]["was_revision_of"] = 7
+        self.assertIsNone(S.revision_of(stamp))
+
+    def test_a_revision_is_not_a_parent_and_not_walked(self):
+        asked = []
+        stamp = S.mark_revision(self._stamp(SHA("2")), self._stamp(SHA("1"), "res:old"))
+        S.walk_chain(stamp, lambda d: asked.append(d))
+        self.assertEqual(asked, [])
+
+    def test_the_revision_is_not_substance(self):
+        a = S.mark_revision(self._stamp(SHA("2")), self._stamp(SHA("1"), "res:old"))
+        b = self._stamp(SHA("2"))
+        self.assertTrue(S.stamps_agree(a, b))
+
+
+class TheParentsHints(unittest.TestCase):
+
+    def _register(self):
+        hints = S.new_hints(SHA("5"))
+        S.note_seen(hints, "/Users/mrossi/export/TILE.glb", when="2026-11-01T10:00:00Z")
+        S.note_parent_seen(hints, "blend:1", BLEND_LOCATOR, machine="mbp-ed",
+                           when="2026-11-01T10:00:00Z")
+        S.note_parent_seen(hints, "blend:2", "blend:///Users/mrossi/b.blend#Object/B",
+                           when="2026-11-01T10:00:00Z")
+        S.note_parent_seen(hints, "res:9", "s3://em-assets/res_9/x.glb",
+                           when="2026-11-01T10:00:00Z")
+        return hints
+
+    def test_one_key_per_parent_and_the_assets_own_register_untouched(self):
+        hints = self._register()
+        self.assertEqual(hints["digest"], SHA("5"))
+        self.assertEqual(sorted(hints["from"]), ["blend:1", "blend:2", "res:9"])
+        self.assertEqual(S.parent_hints(hints, "blend:1")["seen"][0]["kind"], "blend")
+        self.assertEqual(S.parent_hints(hints, "blend:1")["seen"][0]["scope"], "private")
+
+    def test_seen_twice_is_one_hint(self):
+        hints = self._register()
+        S.note_parent_seen(hints, "blend:1", BLEND_LOCATOR, machine="mbp-ed",
+                           when="2026-11-02T10:00:00Z")
+        self.assertEqual(len(hints["from"]["blend:1"]), 1)
+        self.assertEqual(hints["from"]["blend:1"][0]["when"], "2026-11-02T10:00:00Z")
+
+    def test_none_of_the_private_ones_leaves_by_the_one_door(self):
+        out = S.for_export(self._register())
+        text = json.dumps(out)
+        self.assertNotIn("mrossi", text)
+        self.assertNotIn("mbp-ed", text)
+        self.assertEqual(out["from"], {"res:9": [
+            {"locator": "s3://em-assets/res_9/x.glb", "kind": "s3",
+             "scope": "public", "when": "2026-11-01T10:00:00Z"}]})
+
+    def test_the_private_locators_include_the_parents(self):
+        self.assertEqual(sorted(S.private_locators(self._register())),
+                         sorted(["/Users/mrossi/export/TILE.glb", BLEND_LOCATOR,
+                                 "blend:///Users/mrossi/b.blend#Object/B"]))
+
+    def test_THE_COUNTEREXAMPLE_a_parent_with_no_id(self):
+        with self.assertRaises(ValueError):
+            S.note_parent_seen(S.new_hints(SHA("5")), "", BLEND_LOCATOR)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Il timbro — formato deciso (14-09-2026, revisioni 04-10-2026 e 21-10-2026)
+# Il timbro — formato deciso (14-09-2026, revisioni 04-10-2026, 21-10-2026 e 01-11-2026)
 
 > **Nota sulla lingua.** Questa specifica è in italiano perché è nata così, e
 > muoverla di repo non è il momento di riscriverla: una traduzione fatta di
@@ -174,7 +174,12 @@ assi:
   `recording_sheet`). Il **recupero**: arriva già fatto, opaco (`download`, `local_import`, `uri_reference`,
   `ingest`). La famiglia si legge dal vocabolario e non si scrive nel timbro. Un'acquisizione ha `from: []`.
 * **`process`** — la genesi da genitori: `photogrammetry`, `transformation`, e dal 1.6.22 `decimation`,
-  `georeferencing`, `format_conversion`, `classification`, `vectorization`.
+  `georeferencing`, `format_conversion`, `classification`, `vectorization`. Dal **1.6.29** (s3Dgraphy dev28,
+  01-11-2026) i quattro gesti di chi esporta da uno strumento d'autore: **`export`** (un oggetto del progetto
+  scritto in un file), **`lod_generation`** (un livello di dettaglio cotto dal master), **`tiling`** (una mesh
+  divisa in un albero di 3D Tiles), **`packing`** (un albero impacchettato in un archivio, il `.3tz`). Prima,
+  gli stessi gesti si scrivevano `format_conversion`, `decimation` e `transformation`, con il gesto preciso in
+  `technique`: quei timbri restano veri.
 
 Un timbro d'origine di una cattura scrive il genere in `how.dtc_kind` (`"photo"`), non altrove: la forma
 provvisoria che lo metteva in `how.acquisition.capture` accanto a un `local_import` segnaposto si legge ancora,
@@ -356,6 +361,91 @@ solo, ed è **rumoroso, non silenzioso**: ignorando `digest_covers` proverebbe a
 verificare un digest di lista come i byte di un file, e fallirebbe — un falso
 «cambiato», mai un falso «è lui».
 
+## Il passo nato in uno strumento d'autore (01-11-2026)
+
+Decisione di E.D. del 01-10-2026, sui quattro scostamenti che EM Tools aveva dovuto fare il giorno in cui ha
+cominciato a timbrare ciò che Blender esporta. Il master è un oggetto dentro un `.blend`: non ha byte suoi, e il
+`.blend` è lo **stato operativo**, che cambia per ragioni che con quell'oggetto non c'entrano. Tre aggiunte, tutte
+**facoltative e additive**, e nessuna è identità.
+
+### `from[].state`: lo stato del genitore al momento del gesto
+
+```json
+"from": [{ "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279",
+           "label": "TILE", "tier": "master", "packaging": "datablock",
+           "state": { "fingerprint": "struct:bb=…:f=6:mat=TILE_mat:v=8",
+                      "sha256": "sha256:f8667582…bffa147",
+                      "saved": false,
+                      "note": "the .blend had unsaved changes: …" } }]
+```
+
+* **`fingerprint`** — l'impronta strutturale nello schema di chi la calcola (`emstruct1:`, o il `struct:` di
+  EM Tools): **confronta, non prova**. Per questo sta qui e non nel `digest` della voce, che per la regola dei
+  prefissi sarebbe letto come identità;
+* **`sha256`** — lo sha256 del **contenitore** così com'era sul disco (il `.blend`), `sha256:<hex>`: dice in
+  quale file salvato cercare l'oggetto;
+* **`saved`** — `true` o `false`. Un oggetto esportato da un `.blend` con modifiche non salvate **non è quello
+  del file sul disco**, e il timbro lo dice invece di lasciarlo indovinare;
+* **`note`** — una frase per un umano, cortesia come ogni etichetta.
+
+Chi legge **conserva** `state` e i campi che non conosce. Un valore di forma sbagliata resta nel file e fuori
+dalla lettura (`parent_state`), mai un rifiuto del timbro. **Non è sostanza**: lo stesso oggetto riesportato dopo
+un salvataggio dà gli stessi byte e lo stesso genitore — cambiano lo sha256 del `.blend` e `saved`, e i due timbri
+sono lo stesso fatto (caso `26`). I lettori leggono anche la grafia del primo giorno (`blend`, `blend_saved`, solo
+nelle build di sviluppo di EM Tools del 01-10-2026); nessuno la scrive più.
+
+### `self.was_revision_of`: la distribution precedente dello stesso master
+
+```json
+"self": { "resource_id": "res:6e4a5f…", "digest": "sha256:6e4a5f…",
+          "was_revision_of": { "resource_id": "res:51101eee…", "digest": "sha256:51101eee…" } }
+```
+
+Riesportato, lo stesso oggetto dà byte nuovi, e byte nuovi sono un artefatto nuovo («Quando qualcuno riordina»,
+sopra). `was_revision_of` nomina **per identità** la distribution che sostituisce: `resource_id`, e il `digest`
+che aveva. Il vecchio timbro resta accanto, citabile. È la parola che s3Dgraphy usa per la revisione di una
+risorsa (decisione del 30-09-2026). Un lettore accetta anche una stringa sola, letta come `resource_id`.
+
+**Gli stessi byte non sono una revisione**: sono lo stesso fatto, e il timbro che c'è resta (`mark_revision` lo
+rifiuta). **Non è un genitore**: la risalita non la segue, perché la versione di prima non ha fatto questi byte.
+**Non è sostanza**: quale file questi byte abbiano sostituito è la storia di un nome di file, non un fatto sui
+byte.
+
+### Le piste dei genitori: nello stesso `<asset>.hints.json`, una chiave per genitore
+
+Il locatore `blend://` di un master è un percorso, quindi non sta nel timbro. Un genitore che è un file ha il suo
+registro accanto a sé; **un datablock non ha un file accanto a cui stare**. Le sue piste vanno nel registro
+dell'asset, sotto `from`, **una chiave per genitore** — il `resource_id` che ha nella `from` del timbro — con le
+voci di sempre:
+
+```json
+{ "hints": 1,
+  "digest": "sha256:51101eee…",
+  "seen": [ { "locator": "/Users/…/export/TILE.glb", "kind": "local", "scope": "private", "when": "…" } ],
+  "from": { "blend:72474475-…": [ { "locator": "blend:///Users/…/scavo.blend#Object/TILE",
+                                     "kind": "blend", "scope": "private", "when": "…" } ] } }
+```
+
+Perché qui e non in un file `<asset>.from.hints.json` (la proposta di EM Tools del 01-10-2026), misurato:
+
+* `digest` e `seen` restano il registro dell'asset, com'erano: chi non conosce `from` (la 0.1.2, il TypeScript
+  di EMStudio, il ponte) legge, annota e riscrive il file senza perderlo;
+* un file in più era un **terzo** nome accanto al timbro, e un registro v1 porta **un** digest: con due master
+  (un tileset da due mesh) il file proposto metteva il locatore del secondo sotto l'id del primo. Con una chiave
+  per genitore il caso non esiste;
+* la porta verso l'esterno è la stessa e non ha interruttore: `for_export` lascia uscire solo le piste
+  `public` anche dei genitori, mai il nome della macchina; `private_locators` le elenca tutte.
+
+`note_parent_seen` scrive, `parent_hints` restituisce le piste di un genitore come un registro suo.
+
+### Le versioni non cambiano
+
+`STAMP_VERSION` e `HINTS_VERSION` restano **1**, per la regola di sempre: salgono solo se un lettore vecchio non
+legge più un file nuovo. Misurato: la 0.1.2 di PyPI, con il proprio runner, passa i casi `24`–`26` (valida il
+timbro, legge il genitore, riscrive senza perdere `state` e `was_revision_of`), e il suo `note_seen` riscrive un
+registro con `from` senza toccarlo. Il solo effetto di un lettore vecchio è sul verso sicuro: il suo
+`for_export` non lascia uscire le piste dei genitori, nemmeno quelle pubbliche.
+
 ## Le piste — file separato, mutevole, mai coperto dal digest
 
 ```json
@@ -403,6 +493,9 @@ bake in poi *dimostra*.
 `<asset>.stamp.json` e `<asset>.hints.json`, in inglese perché il formato esce dal nostro perimetro. Non
 `em.json` (specie diversa: inviterebbe a fondere, editare, versionare il timbro). Non `dtc.json` (promette una
 catena e consegna un anello).
+
+Le piste dei genitori stanno nello **stesso** `<asset>.hints.json`, sotto `from` (01-11-2026): non c'è un terzo
+nome.
 
 ## Aperto
 

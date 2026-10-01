@@ -58,6 +58,8 @@ path relative to this folder; they are fixtures, not cases.
 | `content_digest` / `files` | the identity of the tree's content, and how many files — the SAME for the folder and the archive |
 | `canonical` / `failed_criteria` / `reasons_contain` | what `is_canonical_3tz` says, which criteria fail, fragments its reasons must carry |
 | `blend_locator` / `hint_kind` / `hint_scope` | the locator string, and how a hint for it is classified |
+| `parent_0_state` | what `parent_state` reads from the first parent, **after a write and a read** (01-11-2026) |
+| `revision_of` | what `revision_of` reads, after a write and a read: `{resource_id, digest?}` |
 
 ## The case every 3tz writer reproduces
 

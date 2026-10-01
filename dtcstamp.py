@@ -475,8 +475,13 @@ def substance(stamp: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(itself.get("content_digest"), dict) else None
     # NOT `self.label` nor `self.description`: a title is a courtesy, and two
     # people naming the same bytes differently have not disagreed about them.
+    # NOT `self.was_revision_of` (01-11-2026): which distribution these bytes
+    # replaced is the history of a file name, not a fact about the bytes.
 
-    # The parents by identity, never by label: a `label` is a courtesy.
+
+    # The parents by identity, never by label: a `label` is a courtesy. Nor
+    # by `state` (01-11-2026): the same object exported again after a save is
+    # the same parent, and its container's sha256 is not its identity.
     parents = stamp.get("from")
     if isinstance(parents, list):
         out["from"] = sorted(
@@ -832,13 +837,32 @@ def for_export(hints: Dict[str, Any]) -> Dict[str, Any]:
         # computer is not part of an address, and in a file that travels it is
         # just one more thing that is known about them.
         out["seen"].append({k: v for k, v in entry.items() if k != "machine"})
+    # the parents' hints (01-11-2026) go through THE SAME DOOR: only public,
+    # never the machine. A parent with no public place is not listed at all.
+    parents = hints.get("from")
+    if isinstance(parents, dict):
+        kept = {}
+        for parent_id, entries in parents.items():
+            public = [{k: v for k, v in e.items() if k != "machine"}
+                      for e in entries or [] if isinstance(e, dict)
+                      and e.get("scope") == "public"]
+            if public:
+                kept[str(parent_id)] = public
+        if kept:
+            out["from"] = kept
     return out
 
 
 def private_locators(hints: Dict[str, Any]) -> List[str]:
     """The locators that must not leave. To **prove** it, not to use them."""
-    return [str(e.get("locator") or "") for e in hints.get("seen") or []
-            if isinstance(e, dict) and e.get("scope") != "public"]
+    out = [str(e.get("locator") or "") for e in hints.get("seen") or []
+           if isinstance(e, dict) and e.get("scope") != "public"]
+    parents = hints.get("from")
+    if isinstance(parents, dict):
+        for entries in parents.values():
+            out.extend(str(e.get("locator") or "") for e in entries or []
+                       if isinstance(e, dict) and e.get("scope") != "public")
+    return out
 
 
 def hints_filename(digest: str, *, asset: Optional[str] = None) -> str:
@@ -1760,6 +1784,151 @@ def new_datablock_stamp(resource_id: str, blend_path: str, name: str, *,
     return stamp, hints
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# THE STEP BORN IN AN AUTHORING TOOL (01-11-2026) — the parent's state, the
+# revision, and the parents' hints
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Three additions, all OPTIONAL and additive, decided by E.D. on 01-10-2026 on
+# what EM Tools had to write the day it began stamping what Blender exports.
+# None of them is identity, so none is part of :func:`substance`: the digest of
+# the output already says which bytes, and these say how the author's side stood.
+
+#: The operational state of a parent at the moment of the gesture. A datablock
+#: has no bytes of its own: what can be said is its structural fingerprint, the
+#: sha256 of the container it lives in (the ``.blend`` on disk) and whether that
+#: container was saved — an object exported from an unsaved file is NOT the one
+#: in the file on disk, and the stamp says so instead of letting it be guessed.
+PARENT_STATE_KEYS = ("fingerprint", "sha256", "saved")
+
+#: The spelling EM Tools wrote on 01-10-2026, before the format had the field
+#: (development builds only): read, never written.
+_LEGACY_STATE = {"blend": "sha256", "blend_saved": "saved"}
+
+_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def with_parent_state(entry: Dict[str, Any], *, fingerprint: Optional[str] = None,
+                      sha256: Optional[str] = None, saved: Optional[bool] = None,
+                      note: Optional[str] = None) -> Dict[str, Any]:
+    """Write ``state`` on a ``from`` entry, and return the entry.
+
+    ``fingerprint`` is the structural fingerprint in whatever scheme the tool
+    computes (``emstruct1:…``, EM Tools' ``struct:…``): it compares, it does
+    not prove. ``sha256`` is the container's file digest and must be one.
+    ``note`` is a sentence for a human, a courtesy like every label.
+    """
+    state: Dict[str, Any] = {}
+    if fingerprint:
+        state["fingerprint"] = str(fingerprint)
+    if sha256:
+        if not _SHA256.match(str(sha256)):
+            raise ValueError(f"state.sha256 is the container's digest, "
+                             f"`sha256:<64 hex>`, got {sha256!r}")
+        state["sha256"] = str(sha256)
+    if saved is not None:
+        if not isinstance(saved, bool):
+            raise ValueError(f"state.saved is true or false, got {saved!r}")
+        state["saved"] = saved
+    if note:
+        state["note"] = str(note)
+    if state:
+        entry["state"] = state
+    return entry
+
+
+def parent_state(entry: Any) -> Optional[Dict[str, Any]]:
+    """The ``state`` of a ``from`` entry as the format spells it, or None.
+
+    A value of the wrong shape is left out of the reading (the file keeps it):
+    a reader that refused the stamp for it would lose a record.
+    """
+    if not isinstance(entry, dict) or not isinstance(entry.get("state"), dict):
+        return None
+    raw = dict(entry["state"])
+    for old, new in _LEGACY_STATE.items():
+        if old in raw and new not in raw:
+            raw[new] = raw[old]
+    out: Dict[str, Any] = {}
+    if isinstance(raw.get("fingerprint"), str) and raw["fingerprint"]:
+        out["fingerprint"] = raw["fingerprint"]
+    if isinstance(raw.get("sha256"), str) and _SHA256.match(raw["sha256"]):
+        out["sha256"] = raw["sha256"]
+    if isinstance(raw.get("saved"), bool):
+        out["saved"] = raw["saved"]
+    if isinstance(raw.get("note"), str) and raw["note"]:
+        out["note"] = raw["note"]
+    return out or None
+
+
+def mark_revision(stamp: Dict[str, Any], previous: Dict[str, Any]) -> Dict[str, Any]:
+    """``self.was_revision_of`` = the previous distribution of the same master.
+
+    ``{resource_id, digest}``: the id names it, the digest says which bytes it
+    was. **The same bytes are not a revision** — they are the same fact, and the
+    stamp that is there stands — so that is refused.
+    """
+    old = (previous or {}).get("self") or {}
+    old_id = str(old.get("resource_id") or "").strip()
+    if not old_id:
+        raise ValueError("the previous stamp names no artifact (no self.resource_id)")
+    mine = stamp.setdefault("self", {})
+    if old.get("digest") and old.get("digest") == mine.get("digest"):
+        raise ValueError("the same bytes are the same fact, not a revision")
+    revision: Dict[str, Any] = {"resource_id": old_id}
+    if old.get("digest"):
+        revision["digest"] = str(old["digest"])
+    mine["was_revision_of"] = revision
+    return stamp
+
+
+def revision_of(stamp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """``{resource_id, digest?}`` of what this stamp's output revises, or None.
+
+    A bare string is read as the ``resource_id`` (the shortest form a writer
+    may use); anything else is not a revision.
+    """
+    value = (stamp.get("self") or {}).get("was_revision_of")
+    if isinstance(value, str) and value.strip():
+        return {"resource_id": value.strip()}
+    if isinstance(value, dict) and str(value.get("resource_id") or "").strip():
+        out = {"resource_id": str(value["resource_id"]).strip()}
+        if isinstance(value.get("digest"), str) and value["digest"]:
+            out["digest"] = value["digest"]
+        return out
+    return None
+
+
+def note_parent_seen(hints: Dict[str, Any], parent_id: str, locator: str, *,
+                     kind: Optional[str] = None, scope: Optional[str] = None,
+                     machine: Optional[str] = None,
+                     when: Optional[str] = None) -> Dict[str, Any]:
+    """Note where a PARENT was seen, in the asset's own ``<asset>.hints.json``.
+
+    A parent that is a file has its own register beside it; a parent that is a
+    datablock has no file to stand beside, and its ``blend://`` locator is a
+    path the stamp may not carry. So it goes here, under ``from``, **one key per
+    parent** — the ``resource_id`` it has in the stamp's ``from`` — with the
+    entries of :func:`note_seen`, the same rules (updated, never duplicated,
+    private unless public by kind).
+    """
+    if not str(parent_id or "").strip():
+        raise ValueError("a parent's hints are keyed by its resource_id")
+    register = {"seen": list((hints.setdefault("from", {})).get(str(parent_id)) or [])}
+    entry = note_seen(register, locator, kind=kind, scope=scope,
+                      machine=machine, when=when)
+    hints["from"][str(parent_id)] = register["seen"]
+    return entry
+
+
+def parent_hints(hints: Dict[str, Any], parent_id: str) -> Dict[str, Any]:
+    """A parent's hints as a register of its own (``{hints, digest, seen}``),
+    so that everything that reads a register reads this one too."""
+    entries = (hints.get("from") or {}).get(str(parent_id)) or []
+    return {"hints": HINTS_VERSION, "digest": str(parent_id),
+            "seen": [dict(e) for e in entries if isinstance(e, dict)]}
+
+
 __all__ = [
     "ALREADY_WALKED", "BadStamp", "CEILING", "COMPARABLE", "COMPARABLE_SCHEMES",
     "DESCRIPTION_HINT_CHARS", "Disagreement", "HINTS_SUFFIX", "HINTS_VERSION", "KNOWN_KINDS", "NOT_A_FILE",
@@ -1784,4 +1953,7 @@ __all__ = [
     "new_datablock_stamp", "new_file_set_stamp", "new_tree_stamp",
     "parse_blend_locator", "same_content", "tree_members", "unclaimed_files",
     "verify_members", "verify_tree",
+    # the step born in an authoring tool (01-11-2026)
+    "PARENT_STATE_KEYS", "mark_revision", "note_parent_seen", "parent_hints",
+    "parent_state", "revision_of", "with_parent_state",
 ]

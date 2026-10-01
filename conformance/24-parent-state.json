@@ -1,0 +1,76 @@
+{
+ "case": "a parent's state: the object in the .blend at the moment of the export",
+ "why": "A datablock has no bytes of its own. What can be said is its structural fingerprint, the sha256 of the container (the .blend on disk) and whether it was saved: an object exported from an unsaved file is not the one in the file on disk. `from[].state` is optional and additive: a 0.1.2 reader keeps it (it validates the stamp, reads the parent, writes it back whole).",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:51101eeedd4c7559",
+   "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+   "digest_covers": "artifact",
+   "packaging": "file",
+   "format": "glb",
+   "media_type": "model/gltf-binary",
+   "tier": "distribution"
+  },
+  "from": [
+   {
+    "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279",
+    "label": "TILE",
+    "tier": "master",
+    "packaging": "datablock",
+    "state": {
+     "fingerprint": "struct:bb=-0.5,-0.5,0;0.5,0.5,1:f=6:mat=TILE_mat:v=8",
+     "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+     "saved": false,
+     "note": "the .blend had unsaved changes: the object exported is not the one in this file on disk"
+    }
+   }
+  ],
+  "how": {
+   "dtc_kind": "export",
+   "technique": "glTF binary export",
+   "software": [
+    {
+     "name": "Blender",
+     "version": "5.2.0 LTS"
+    }
+   ]
+  },
+  "by": {
+   "at": "2026-11-01T10:00:00Z"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "identity_strength": "verifiable",
+  "verifiable": true,
+  "parents": 1,
+  "parent_0": {
+   "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279",
+   "tier": "master",
+   "packaging": "datablock",
+   "state": {
+    "fingerprint": "struct:bb=-0.5,-0.5,0;0.5,0.5,1:f=6:mat=TILE_mat:v=8",
+    "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "saved": false,
+    "note": "the .blend had unsaved changes: the object exported is not the one in this file on disk"
+   }
+  },
+  "parent_0_state": {
+   "fingerprint": "struct:bb=-0.5,-0.5,0;0.5,0.5,1:f=6:mat=TILE_mat:v=8",
+   "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "saved": false,
+   "note": "the .blend had unsaved changes: the object exported is not the one in this file on disk"
+  },
+  "receipt": {
+   "id": "res:51101eeedd4c7559",
+   "checksum": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+   "stamp": 1,
+   "parents": [
+    {
+     "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279"
+    }
+   ]
+  }
+ }
+}

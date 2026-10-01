@@ -1,0 +1,90 @@
+{
+ "case": "two that differ only in the parent's state and in what they revise",
+ "why": "The same object exported again after a save gives the same bytes: the .blend's sha256 changed and `saved` became true, but the parent is the same parent and the output the same output. Neither `from[].state` nor `self.was_revision_of` is identity, so the two agree and deduplicate.",
+ "pair": [
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:51101eeedd4c7559",
+    "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "digest_covers": "artifact",
+    "packaging": "file",
+    "format": "glb",
+    "media_type": "model/gltf-binary",
+    "tier": "distribution"
+   },
+   "from": [
+    {
+     "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279",
+     "label": "TILE",
+     "tier": "master",
+     "packaging": "datablock",
+     "state": {
+      "fingerprint": "struct:bb=-0.5,-0.5,0;0.5,0.5,1:f=6:mat=TILE_mat:v=8",
+      "sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "saved": false,
+      "note": "the .blend had unsaved changes: the object exported is not the one in this file on disk"
+     }
+    }
+   ],
+   "how": {
+    "dtc_kind": "export",
+    "technique": "glTF binary export",
+    "software": [
+     {
+      "name": "Blender",
+      "version": "5.2.0 LTS"
+     }
+    ]
+   },
+   "by": {
+    "at": "2026-11-01T10:00:00Z"
+   }
+  },
+  {
+   "stamp": 1,
+   "self": {
+    "resource_id": "res:51101eeedd4c7559",
+    "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "digest_covers": "artifact",
+    "packaging": "file",
+    "format": "glb",
+    "media_type": "model/gltf-binary",
+    "tier": "distribution",
+    "was_revision_of": {
+     "resource_id": "res:0000000000000001"
+    }
+   },
+   "from": [
+    {
+     "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279",
+     "label": "TILE",
+     "tier": "master",
+     "packaging": "datablock",
+     "state": {
+      "fingerprint": "struct:bb=-0.5,-0.5,0;0.5,0.5,1:f=6:mat=TILE_mat:v=8",
+      "sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "saved": true
+     }
+    }
+   ],
+   "how": {
+    "dtc_kind": "export",
+    "technique": "glTF binary export",
+    "software": [
+     {
+      "name": "Blender",
+      "version": "5.2.0 LTS"
+     }
+    ]
+   },
+   "by": {
+    "at": "2026-11-01T11:00:00Z"
+   }
+  }
+ ],
+ "expect": {
+  "agree": true,
+  "disagreements": []
+ }
+}

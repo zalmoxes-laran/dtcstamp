@@ -1,0 +1,42 @@
+{
+ "case": "a revision: the new bytes of the same distribution name the old ones",
+ "why": "Exported again, the same object gives new bytes, and new bytes are a new artifact. `self.was_revision_of` names the previous distribution of the same master by identity — `resource_id`, and the digest it had — so the old stamp stays citable beside the new one. Optional and additive; not substance, not a parent.",
+ "stamp": {
+  "stamp": 1,
+  "self": {
+   "resource_id": "res:6e4a5f0000000000",
+   "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+   "digest_covers": "artifact",
+   "packaging": "file",
+   "tier": "distribution",
+   "was_revision_of": {
+    "resource_id": "res:51101eeedd4c7559",
+    "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+   }
+  },
+  "from": [
+   {
+    "resource_id": "blend:72474475-6f84-589a-b600-eea12f464279",
+    "tier": "master",
+    "packaging": "datablock"
+   }
+  ],
+  "how": {
+   "dtc_kind": "export"
+  },
+  "by": {
+   "at": "2026-11-01T10:05:00Z"
+  }
+ },
+ "expect": {
+  "valid": true,
+  "parents": 1,
+  "preserved": [
+   "self.was_revision_of"
+  ],
+  "revision_of": {
+   "resource_id": "res:51101eeedd4c7559",
+   "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+  }
+ }
+}

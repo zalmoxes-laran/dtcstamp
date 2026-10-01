@@ -9,6 +9,39 @@ are the on-disk format versions, and they change only when a file written by
 an older reader stops being readable. A release that leaves them untouched has
 not changed the format.
 
+## [0.1.3] — YYYY-MM-DD <!-- the date is written when the tag is made -->
+
+The stamp that is born in an authoring tool (decision of E.D., 01-10-2026, on
+the four departures EM Tools had to make the day it began stamping Blender's
+exports). Spec revision 01-11-2026, section «Il passo nato in uno strumento
+d'autore».
+
+**The format did not change.** `STAMP_VERSION = 1` and `HINTS_VERSION = 1`.
+Measured: the 0.1.2 wheel from PyPI, with its own corpus runner, passes cases
+24–26, and its `note_seen` rewrites a register carrying `from` without
+touching it. By the rule at the top of this file, neither moves.
+
+### Added
+- `from[].state` — the parent's operational state at the moment of the
+  gesture: `fingerprint` (structural, compares and does not prove), `sha256`
+  (the container, the `.blend` on disk), `saved`, and a `note` for a human.
+  `with_parent_state`, `parent_state` (reads the first-day spelling
+  `blend`/`blend_saved` too), `PARENT_STATE_KEYS`. Not substance.
+- `self.was_revision_of` — `{resource_id, digest?}` of the previous
+  distribution of the same master. `mark_revision` (refuses the same bytes:
+  the same fact is not a revision), `revision_of` (a bare string reads as the
+  id). Not substance, not a parent: the walk does not follow it.
+- The parents' hints in the asset's own `<asset>.hints.json`, under `from`,
+  one key per parent `resource_id`: `note_parent_seen`, `parent_hints`.
+  `for_export` lets out only their public hints, never the machine;
+  `private_locators` lists theirs too. No `<asset>.from.hints.json`.
+- The spec lists `export`, `lod_generation`, `tiling`, `packing` among the
+  `process` kinds (s3Dgraphy `em_visual_rules` 1.6.29). dtcstamp still does
+  not validate kinds.
+- Conformance cases 24 (a parent's state), 25 (a revision), 26 (a pair that
+  differs only in those two, and agrees); the runner reads `parent_0_state`
+  and `revision_of` after a write and a read.
+
 ## [0.1.2] — YYYY-MM-DD <!-- the date is written when the tag is made -->
 
 Everything since 0.1.1: the stamp's title and description, `decimation` in the
