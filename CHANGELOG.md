@@ -9,7 +9,17 @@ are the on-disk format versions, and they change only when a file written by
 an older reader stops being readable. A release that leaves them untouched has
 not changed the format.
 
-## [Unreleased]
+## [0.1.2] — YYYY-MM-DD <!-- the date is written when the tag is made -->
+
+Everything since 0.1.1: the stamp's title and description, `decimation` in the
+`dtc_kind` vocabulary, the resource of more than one file (`members_digest`,
+`content_digest`), the one `.3tz` profile with NFC names and flag `0x800`, and
+conformance cases 15–23.
+
+**The format did not change.** Measured against `v0.1.1`: `STAMP_VERSION = 1`
+and `HINTS_VERSION = 1` in both. Everything added is optional; nothing a 0.1.1
+reader accepted is refused now. By the rule at the top of this file, neither
+moves.
 
 ### Changed — the one `.3tz` profile: NFC names, flag `0x800` (22-10-2026)
 - `profiles/3tz.md`: every name in **Unicode NFC** (macOS gives NFD: the same
@@ -72,6 +82,16 @@ not changed the format.
   `{id, checksum, stamp, parents, title?, description?}`, parents by identity
   only, title and description as a copy.
 - Conformance 15–17 and the runner keys `title`, `description`, `receipt`.
+
+## [0.1.1] — 2026-09-16
+
+No change to the library or the format: only `__version__` moved.
+
+### Changed
+- The release workflow asks each question on an interpreter that can answer
+  it: the suite on every Python from 3.9 to 3.13, the exact zero-dependency
+  check on 3.12 (`sys.stdlib_module_names` does not exist before 3.10), and
+  the publish waits for both.
 
 ## [0.1.0] — 2026-09-16
 

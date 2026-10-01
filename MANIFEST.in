@@ -13,6 +13,9 @@ include stamp-format.md
 # their expected outcome, not just the Python that happens to pass them.
 recursive-include conformance *.json
 recursive-include conformance/data *.3tz
+# …and the table of what each `expect` key means, without which the cases are
+# answers with no questions.
+include conformance/README.md
 
 # The one .3tz profile is part of the specification.
 recursive-include profiles *.md
