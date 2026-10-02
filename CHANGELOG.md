@@ -9,7 +9,7 @@ are the on-disk format versions, and they change only when a file written by
 an older reader stops being readable. A release that leaves them untouched has
 not changed the format.
 
-## [0.1.3] — YYYY-MM-DD <!-- the date is written when the tag is made -->
+## [0.1.3] — 2026-10-02
 
 The stamp that is born in an authoring tool (decision of E.D., 01-10-2026, on
 the four departures EM Tools had to make the day it began stamping Blender's
@@ -48,7 +48,7 @@ touching it. By the rule at the top of this file, neither moves.
   differs only in those two, and agrees), 27 (the operator by id); the runner reads `parent_0_state`
   and `revision_of` after a write and a read.
 
-## [0.1.2] — YYYY-MM-DD <!-- the date is written when the tag is made -->
+## [0.1.2] — 2026-10-01
 
 Everything since 0.1.1: the stamp's title and description, `decimation` in the
 `dtc_kind` vocabulary, the resource of more than one file (`members_digest`,
