@@ -296,7 +296,9 @@ Per un **`file_set`** la lista sta **dentro il timbro**, in `self.members`
 albero. I membri **si trovano, non si elencano a mano**: dall'entry point si
 seguono `mtllib` e `map_*` (con le loro opzioni, `bump`/`disp`/`decal`/`refl`
 comprese) per l'OBJ, `buffers` e `images` per il glTF (e il blocco JSON del
-glb), anche in sottocartelle. Un riferimento assoluto o che esce dalla cartella
+glb), anche in sottocartelle. Un nome **tra virgolette doppie** (`mtllib "Tile
+1.mtl"`, `map_Kd "Tile 1.jpg"`: la forma che Metashape scrive quando il nome ha
+spazi) è quel nome senza le virgolette (0.1.4, caso `29`). Un riferimento assoluto o che esce dalla cartella
 dell'entry point con `../` non si segue e dà un avviso; un file che nessuno
 chiama resta fuori e **si elenca** (al LOD1 di TempluMare: le due `cc_T_*.png`).
 **Il sidecar è uno, accanto alla porta**, con la regola di sempre:
@@ -358,6 +360,17 @@ chi timbra l'ha calcolata, o manca. Il locator `blend://<percorso>#<Tipo>/<nome>
 (la forma di `make_blend_locator` in s3Dgraphy, `resources/resolver.py`) è un
 **percorso**, quindi **non sta nel timbro**: è una pista, `kind: blend`,
 `scope: private`. Il caso `22` fissa la codifica.
+
+### L'asset dentro un progetto Metashape (0.1.4)
+
+Il gemello di `blend://`: `psx://<percorso del .psx>#<label del chunk>/<tipo di
+asset>/<chiave>`, codificato come `blend://`. Il tipo c'è perché il progetto
+numera le chiavi **per tipo**: `model 1` e `point_cloud 1` sono due asset. È la
+forma che scrive 3DSC per Metashape (`dtc_stamp_ms.py`) e che produce il lettore
+di progetti di s3Dgraphy (`make_psx_locator`); `psx_locator` /
+`parse_psx_locator` qui. Anche questo è un **percorso**: una pista, `kind: psx`,
+`scope: private`. Il caso `28` fissa la codifica, con uno spazio, un accento, una
+barra e un cancelletto nel label del chunk.
 
 ### La versione del formato non cambia
 

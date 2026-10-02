@@ -77,6 +77,8 @@ class Corpus(unittest.TestCase):
             return self._run_file_set(case["file_set"], expect)
         if "tree" in case:
             return self._run_tree(case["tree"], expect)
+        if "psx" in case:
+            return self._run_psx(case["psx"], expect)
         if "blend" in case:
             self._run_blend(case["blend"], expect)
         if "pair" in case:
@@ -190,6 +192,16 @@ class Corpus(unittest.TestCase):
         self.assertEqual(S.parse_blend_locator(locator),
                          (spec["path"], spec["type"], spec["name"]))
         self.assertEqual(S.kind_for(locator), expect.get("hint_kind", "blend"))
+        self.assertEqual(S.scope_for(locator), expect.get("hint_scope", "private"))
+
+    def _run_psx(self, spec, expect):
+        locator = S.psx_locator(spec["path"], spec["chunk"], spec["asset_type"],
+                                spec["key"])
+        self.assertEqual(locator, expect["psx_locator"])
+        self.assertEqual(S.parse_psx_locator(locator),
+                         (spec["path"], spec["chunk"], spec["asset_type"],
+                          spec["key"]))
+        self.assertEqual(S.kind_for(locator), expect.get("hint_kind", "psx"))
         self.assertEqual(S.scope_for(locator), expect.get("hint_scope", "private"))
 
     def _run_pair(self, pair, expect):
@@ -1101,6 +1113,86 @@ class TheParentsHints(unittest.TestCase):
         with self.assertRaises(ValueError):
             S.note_parent_seen(S.new_hints(SHA("5")), "", BLEND_LOCATOR)
 
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# AN ASSET INSIDE A METASHAPE PROJECT, AND THE NAMES IN QUOTES (0.1.4)
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ThePsxLocator(unittest.TestCase):
+
+    def test_a_key_counted_per_type_keeps_two_assets_apart(self):
+        model = S.psx_locator("/p/a.psx", "Chunk 1", "model", 1)
+        cloud = S.psx_locator("/p/a.psx", "Chunk 1", "point_cloud", 1)
+        self.assertNotEqual(model, cloud)
+        self.assertEqual(S.parse_psx_locator(model)[2:], ("model", "1"))
+
+    def test_an_empty_chunk_label_goes_and_comes_back(self):
+        loc = S.psx_locator("/p/a.psx", "", "model", 0)
+        self.assertEqual(S.parse_psx_locator(loc), ("/p/a.psx", "", "model", "0"))
+
+    def test_it_is_its_own_kind_and_always_private(self):
+        loc = S.psx_locator("/p/a.psx", "Chunk 1", "model", 2)
+        self.assertIn("psx", S.KNOWN_KINDS)
+        self.assertEqual(S.kind_for(loc), "psx")
+        self.assertEqual(S.scope_for(loc), "private")
+        # a hint noted without a kind classifies itself
+        seen = S.note_seen(S.new_hints(SHA("p")), loc, when="2026-10-02T10:00:00Z")
+        self.assertEqual((seen["kind"], seen["scope"]), ("psx", "private"))
+
+    def test_parse_answers_None_and_never_raises(self):
+        for bad in ("", None, "psx://a.psx", "psx://a.psx#c/model",
+                    "psx://a.psx#c/model/1/extra", "psx://#c/model/1",
+                    "psx://a.psx#c//1", "psx://a.psx#c/model/",
+                    "blend://a.blend#Object/x"):
+            self.assertIsNone(S.parse_psx_locator(bad), bad)
+
+    def test_nothing_to_point_at_is_an_empty_locator(self):
+        self.assertEqual(S.psx_locator("", "c", "model", 1), "")
+        self.assertEqual(S.psx_locator("/a.psx", "c", "", 1), "")
+        self.assertEqual(S.psx_locator("/a.psx", "c", "model", None), "")
+
+
+class TheNamesInQuotes(unittest.TestCase):
+
+    def _follow(self, obj_text, mtl_name, mtl_text, files):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "m.obj").write_text(obj_text)
+            (root / mtl_name).write_text(mtl_text)
+            for name in files:
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_bytes(name.encode())
+            return S.follow_references(str(root / "m.obj"))
+
+    def test_mtllib_and_map_Kd_in_quotes_are_followed(self):
+        found = self._follow('mtllib "a b.mtl"\nv 0 0 0\n', "a b.mtl",
+                             'newmtl x\nmap_Kd "t/a b.jpg"\n', ["t/a b.jpg"])
+        self.assertEqual(sorted(m["path"] for m in found["members"]),
+                         ["a b.mtl", "m.obj", "t/a b.jpg"])
+        self.assertEqual(found["missing"], [])
+
+    def test_several_quoted_names_and_a_bare_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "m.obj").write_text('mtllib "a b.mtl" c.mtl\n')
+            (root / "a b.mtl").write_text("newmtl a\n")
+            (root / "c.mtl").write_text("newmtl c\n")
+            found = S.follow_references(str(root / "m.obj"))
+        self.assertEqual(sorted(m["path"] for m in found["members"]),
+                         ["a b.mtl", "c.mtl", "m.obj"])
+
+    def test_options_before_a_quoted_texture(self):
+        found = self._follow("mtllib m.mtl\n", "m.mtl",
+                             'newmtl x\nmap_Bump -bm 0.5 "n m.png"\n', ["n m.png"])
+        self.assertIn("n m.png", [m["path"] for m in found["members"]])
+
+    def test_the_unquoted_forms_did_not_change(self):
+        """Blender's one name with spaces, and the spec's several names."""
+        found = self._follow("mtllib a b.mtl\n", "a b.mtl", "newmtl x\n", [])
+        self.assertEqual(found["missing"], [])
+        found = self._follow("mtllib x.mtl y.mtl\n", "x.mtl", "newmtl x\n", [])
+        self.assertEqual(found["missing"], ["y.mtl"])
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

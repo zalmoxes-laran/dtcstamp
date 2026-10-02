@@ -749,8 +749,9 @@ SCOPES = ("public", "private")
 
 #: How that place is reached. Open vocabulary — a `kind` that is not here is
 #: recorded anyway, because a hint is an observation and not a declaration of
-#: conformance — but these four write themselves.
-KNOWN_KINDS = ("s3", "http", "local", "blend")
+#: conformance — but these five write themselves. ``psx`` (0.1.4) is an asset
+#: inside a Metashape project, the twin of ``blend``.
+KNOWN_KINDS = ("s3", "http", "local", "blend", "psx")
 
 #: Which kinds are public when nobody says. A store URI is an address;
 #: **everything else is private by default**, and the direction of this default
@@ -773,6 +774,8 @@ def kind_for(locator: str) -> str:
         return "http"
     if text.startswith("blend://"):
         return "blend"
+    if text.startswith(PSX_SCHEME):
+        return "psx"
     return "local"
 
 
@@ -1435,12 +1438,25 @@ def _mtl_file(tokens: List[str]) -> Optional[str]:
             i += 1
             taken += 1
     rest = " ".join(tokens[i:]).strip()
-    return rest or None
+    return _unquoted(rest) or None
+
+
+def _unquoted(name: str) -> str:
+    """``"a b.png"`` → ``a b.png``: the form Metashape writes when a name has
+    spaces (``mtllib "Tile 1.mtl"``, ``map_Kd "Tile 1.jpg"``). Only a name
+    wrapped in double quotes WHOLE loses them; a quote inside a name stays."""
+    if len(name) >= 2 and name[0] == '"' and name[-1] == '"':
+        return name[1:-1]
+    return name
 
 
 def _text_lines(path: str) -> List[str]:
     with open(path, "rb") as handle:
         return handle.read().decode("utf-8", errors="replace").splitlines()
+
+
+#: a name in double quotes, or a run without spaces
+_QUOTED_OR_BARE = re.compile(r'"([^"]*)"|(\S+)')
 
 
 def _obj_refs(path: str) -> List[str]:
@@ -1449,8 +1465,14 @@ def _obj_refs(path: str) -> List[str]:
         parts = line.strip().split(None, 1)
         if len(parts) == 2 and parts[0] == "mtllib":
             whole = parts[1].strip()
+            if '"' in whole:
+                # Metashape's form: each name in double quotes, spaces inside
+                # (`mtllib "Tile 93341-516978.mtl"`); a bare name beside a
+                # quoted one is read too
+                refs.extend(a or b for a, b in _QUOTED_OR_BARE.findall(whole)
+                            if a or b)
             # one name with spaces (Blender) or several names (the spec)
-            if os.path.isfile(os.path.join(here, whole)) or " " not in whole:
+            elif os.path.isfile(os.path.join(here, whole)) or " " not in whole:
                 refs.append(whole)
             else:
                 refs.extend(whole.split())
@@ -1759,6 +1781,50 @@ def parse_blend_locator(locator: str) -> Optional[Tuple[str, str, str]]:
     return unquote(path), unquote(kind), unquote(name)
 
 
+# ── an asset inside a Metashape project (0.1.4) ─────────────────────────────
+#
+# The twin of ``blend://``: ``psx://<path of the .psx>#<chunk label>/<asset
+# type>/<key>``, percent-encoded the same way. The asset type is there because
+# the project numbers its keys PER TYPE — ``model 1`` and ``point_cloud 1`` are
+# two assets. It is the form 3DSC for Metashape writes (``dtc_stamp_ms.py``,
+# 3DSC_Metashape e920b4b) and s3Dgraphy's Metashape reader produces; pinned by
+# conformance case 28. A path on somebody's disk: always ``private``.
+
+PSX_SCHEME = "psx://"
+
+
+def psx_locator(psx_path: str, chunk: str, asset_type: str, key: Any) -> str:
+    """``psx://<path>#<chunk>/<asset type>/<key>``, percent-encoded. The chunk
+    label may be empty (the project allows it); path, type and key may not."""
+    from urllib.parse import quote
+    if not psx_path or not asset_type or key is None or str(key) == "":
+        return ""
+    return (PSX_SCHEME + quote(str(psx_path), safe="/")
+            + "#" + quote(str(chunk or ""), safe="")
+            + "/" + quote(str(asset_type), safe="")
+            + "/" + quote(str(key), safe=""))
+
+
+def parse_psx_locator(locator: str) -> Optional[Tuple[str, str, str, str]]:
+    """``(path, chunk, asset type, key)`` from a ``psx://`` locator, or None.
+    The key comes back as the string it was written as."""
+    from urllib.parse import unquote
+    text = (locator or "").strip()
+    if not text.lower().startswith(PSX_SCHEME):
+        return None
+    rest = text[len(PSX_SCHEME):]
+    if "#" not in rest:
+        return None
+    path, fragment = rest.split("#", 1)
+    parts = fragment.split("/")
+    if len(parts) != 3:
+        return None
+    chunk, asset_type, key = parts
+    if not path or not asset_type or not key:
+        return None
+    return unquote(path), unquote(chunk), unquote(asset_type), unquote(key)
+
+
 def new_datablock_stamp(resource_id: str, blend_path: str, name: str, *,
                         datablock_type: str = "Object",
                         structural_digest: Optional[str] = None,
@@ -1964,4 +2030,6 @@ __all__ = [
     # the step born in an authoring tool (01-11-2026)
     "PARENT_STATE_KEYS", "mark_revision", "note_parent_seen", "parent_hints",
     "parent_state", "revision_of", "with_parent_state",
+    # an asset inside a Metashape project (0.1.4)
+    "PSX_SCHEME", "parse_psx_locator", "psx_locator",
 ]

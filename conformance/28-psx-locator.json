@@ -1,0 +1,15 @@
+{
+ "case": "an asset inside a Metashape project: the psx:// locator",
+ "why": "The twin of blend://. The project numbers its keys per type (model 2 and point_cloud 2 are two assets), so the type is in the locator. Percent-encoded like blend_locator, so a chunk label with a slash or a path with a space and an accent goes and comes back. The form is the one 3DSC for Metashape writes (dtc_stamp_ms.py) and s3Dgraphy's make_psx_locator produces: pinned here so the three cannot drift. A path on somebody's disk: private.",
+ "psx": {
+  "path": "/Users/scavo/Segni 2026/sanpietro_LOD0 è.psx",
+  "chunk": "Chunk 1/LOD0 #2",
+  "asset_type": "model",
+  "key": "2"
+ },
+ "expect": {
+  "psx_locator": "psx:///Users/scavo/Segni%202026/sanpietro_LOD0%20%C3%A8.psx#Chunk%201%2FLOD0%20%232/model/2",
+  "hint_kind": "psx",
+  "hint_scope": "private"
+ }
+}

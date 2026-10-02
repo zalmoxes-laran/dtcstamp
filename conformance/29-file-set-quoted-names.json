@@ -1,0 +1,48 @@
+{
+ "case": "a file_set whose names are in double quotes, as Metashape writes them",
+ "why": "Metashape writes mtllib \"Tile 93341-516978.mtl\" and map_Kd \"Tile 93341-516978.jpg\" when a name has spaces. The quotes are not part of the name: the members are the same three files a name without quotes would call (found by 3DSC for Metashape on the San Pietro blocks; until 0.1.3 the mtl was 'missing'). The neighbour tile's texture stays out and is named.",
+ "file_set": {
+  "files": {
+   "Tile 93341-516978.obj": {
+    "text": "# Metashape block\nmtllib \"Tile 93341-516978.mtl\"\nv 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nusemtl Solid\nf 1/1 2/2 3/3\n"
+   },
+   "Tile 93341-516978.mtl": {
+    "text": "newmtl Solid\nKd 1 1 1\nmap_Kd \"Tile 93341-516978.jpg\"\n"
+   },
+   "Tile 93341-516978.jpg": {
+    "base64": "/9j/4AAQSkZJRiBibG9jaw=="
+   },
+   "Tile 93341-516979.jpg": {
+    "base64": "/9j/4AAQSkZJRiBuZWlnaGJvdXI="
+   }
+  },
+  "entry_point": "Tile 93341-516978.obj"
+ },
+ "expect": {
+  "members": [
+   {
+    "role": "member",
+    "path": "Tile 93341-516978.jpg",
+    "digest": "sha256:0702f771123c1ee77585d9a461701ea48f368e0c595ad4305fde4776b7e66d5e",
+    "size_bytes": 16
+   },
+   {
+    "role": "member",
+    "path": "Tile 93341-516978.mtl",
+    "digest": "sha256:ba5c20fa5adcf193d8ec15b2a9d02de06a63390fc3c3b4f6430cc9a7e3aa9399",
+    "size_bytes": 53
+   },
+   {
+    "role": "entry_point",
+    "path": "Tile 93341-516978.obj",
+    "digest": "sha256:dea98c29f678b5d292c17e1c8b541cfb054b3fde5fb1bc72cfb234c4dfd47cbb",
+    "size_bytes": 121
+   }
+  ],
+  "members_digest": "sha256:505b57b477ca46db9fdb1c9f83eecc8e6dd61a3e41722aff20c578873527da5e",
+  "unclaimed": [
+   "Tile 93341-516979.jpg"
+  ],
+  "warnings": []
+ }
+}

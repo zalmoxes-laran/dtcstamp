@@ -9,6 +9,38 @@ are the on-disk format versions, and they change only when a file written by
 an older reader stops being readable. A release that leaves them untouched has
 not changed the format.
 
+## [0.1.4] — YYYY-MM-DD
+
+An asset inside a Metashape project, and the names Metashape writes in quotes.
+Asked by MICRO-IL-LETTORE-DI-METASHAPE (02-10-2026): 3DSC for Metashape stamps
+its exports with the master's address written `kind: local` because this
+package did not know the kind; s3Dgraphy now reads a `.psx` and needs the same
+address.
+
+**The format did not change.** `STAMP_VERSION = 1` and `HINTS_VERSION = 1`: a
+`psx://` hint is a hint like any other (an open vocabulary, recorded by older
+readers as it is), and following a quoted name finds members an older reader
+called `missing` — the stamp it would write is the one that was wrong.
+
+### Added
+- `psx_locator(psx_path, chunk, asset_type, key)` → `psx://<path>#<chunk>/<asset
+  type>/<key>`, percent-encoded like `blend_locator`, and `parse_psx_locator` →
+  `(path, chunk, asset_type, key)` or None. `PSX_SCHEME`. The form 3DSC for
+  Metashape writes (`dtc_stamp_ms.py`, e920b4b) and s3Dgraphy's
+  `make_psx_locator` produces. Conformance case `28`.
+- `"psx"` in `KNOWN_KINDS`; `kind_for` recognises it; `scope_for` says
+  `private` (a path on somebody's disk).
+
+### Changed
+- `follow_references` reads `mtllib "name with spaces.mtl"` and
+  `map_Kd "name with spaces.jpg"` (any `map_*` and the other file statements)
+  without the quotes — Metashape's form. Several quoted names on one `mtllib`,
+  and a bare one beside them, are read too. The unquoted forms (Blender's one
+  name with spaces, the spec's several names) are unchanged. Conformance case
+  `29`. 3DSC for Metashape's test that pins the 0.1.3 behaviour
+  (`test_quoted_mtllib_is_not_followed_by_dtcstamp_013`) fails against this
+  release, as it was written to.
+
 ## [0.1.3] — 2026-10-02
 
 The stamp that is born in an authoring tool (decision of E.D., 01-10-2026, on

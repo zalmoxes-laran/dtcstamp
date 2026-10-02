@@ -23,6 +23,7 @@ Every file is one JSON object. Three kinds, told apart by which key they carry:
 | `file_set` | an entry point and its files (`files`, written to a temporary folder): which members following the references finds |
 | `tree` | a tileset as a folder (`files`) and as a `.3tz` (`archive`, a file under `data/`): one content digest for both |
 | `stamp` + `blend` | a datablock, and the exact `blend://` locator for `blend.path` / `type` / `name` |
+| `psx` | an asset inside a Metashape project: the exact `psx://` locator for `psx.path` / `chunk` / `asset_type` / `key` (0.1.4) |
 
 `files` maps a path (forward slashes) to `{"text": …}` (UTF-8) or
 `{"base64": …}`. The binary archives live in `data/` and are referenced by a
@@ -58,6 +59,7 @@ path relative to this folder; they are fixtures, not cases.
 | `content_digest` / `files` | the identity of the tree's content, and how many files — the SAME for the folder and the archive |
 | `canonical` / `failed_criteria` / `reasons_contain` | what `is_canonical_3tz` says, which criteria fail, fragments its reasons must carry |
 | `blend_locator` / `hint_kind` / `hint_scope` | the locator string, and how a hint for it is classified |
+| `psx_locator` | the `psx://` locator of an asset inside a Metashape project (0.1.4), with `hint_kind` / `hint_scope` as above |
 | `parent_0_state` | what `parent_state` reads from the first parent, **after a write and a read** (01-11-2026) |
 | `revision_of` | what `revision_of` reads, after a write and a read: `{resource_id, digest?}` |
 
