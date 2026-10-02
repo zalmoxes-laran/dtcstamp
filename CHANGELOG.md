@@ -32,6 +32,11 @@ called `missing` — the stamp it would write is the one that was wrong.
   `private` (a path on somebody's disk).
 
 ### Changed
+- `stamp_identity` reads `self.digest_covers` (E.D., 02-10-2026, on the dev29
+  report): for a file set (`members`) the claim says the identity is the
+  set's — the list of its members, not the bytes of one file — and the answer
+  carries `covers` and `verify_with: "verify_members"`. A stamp of one file
+  reads as before.
 - `follow_references` reads `mtllib "name with spaces.mtl"` and
   `map_Kd "name with spaces.jpg"` (any `map_*` and the other file statements)
   without the quotes — Metashape's form. Several quoted names on one `mtllib`,

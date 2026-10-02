@@ -260,8 +260,26 @@ def stamp_identity(stamp: Dict[str, Any]) -> Dict[str, Any]:
 
     Here, rather than left to the reader, because it is the question an interface
     has to ask **before** writing «verified» next to a row.
+
+    It reads ``self.digest_covers`` too (0.1.4): for a file set (``members``)
+    the identity is the set's, and the answer says so and names
+    :func:`verify_members` as the way to check it (``covers``,
+    ``verify_with``).
     """
-    return describe_identity((stamp.get("self") or {}).get("digest"))
+    itself = stamp.get("self") or {}
+    out = describe_identity(itself.get("digest"))
+    covers = itself.get("digest_covers")
+    if covers:
+        out["covers"] = covers
+    if covers == "members" and out["strength"] is not None:
+        # The digest of a file set is the digest of its LIST — role, path and
+        # digest of every member — not of the bytes of any one file: checking it
+        # against a file would fail on a set that is perfectly intact. So the
+        # interface is told which identity it holds and how to check it.
+        out["claim"] = ("the identity of the set: the list of its members, "
+                        "not the bytes of one file — check it with verify_members")
+        out["verify_with"] = "verify_members"
+    return out
 
 
 def is_verifiable_stamp(stamp: Dict[str, Any]) -> bool:

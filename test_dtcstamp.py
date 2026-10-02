@@ -870,6 +870,29 @@ def _zip(src, out, *, compress, date=(1980, 1, 1, 0, 0, 0)):
     return out
 
 
+class TheIdentityOfASet(unittest.TestCase):
+    """0.1.4 (E.D., 02-10-2026, D4): stamp_identity reads digest_covers."""
+
+    def test_a_file_set_says_its_identity_is_the_set_and_how_to_check_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            door = _obj_set(tmp, "m", ("a.png", "b.png"))
+            stamp = S.new_file_set_stamp(door, "res:m")
+            ident = S.stamp_identity(stamp)
+            self.assertEqual(ident["covers"], "members")
+            self.assertEqual(ident["verify_with"], "verify_members")
+            self.assertIn("the identity of the set", ident["claim"])
+            self.assertTrue(ident["verifiable"])
+            # and the way it names does check it
+            self.assertTrue(S.verify_members(stamp, door)["ok"])
+
+    def test_a_file_stamp_is_read_as_before(self):
+        stamp = {"stamp": S.STAMP_VERSION,
+                 "self": {"resource_id": "res:f", "digest": "sha256:" + "a" * 64}}
+        ident = S.stamp_identity(stamp)
+        self.assertNotIn("verify_with", ident)
+        self.assertEqual(ident["claim"], "these are those bytes, and anyone can check")
+
+
 class Trees(unittest.TestCase):
 
     def test_folder_and_archive_share_the_content_digest_whatever_the_packing(self):
