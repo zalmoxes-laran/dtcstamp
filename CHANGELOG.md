@@ -9,7 +9,7 @@ are the on-disk format versions, and they change only when a file written by
 an older reader stops being readable. A release that leaves them untouched has
 not changed the format.
 
-## [0.1.4] — YYYY-MM-DD
+## [0.1.4] — 2026-10-02
 
 An asset inside a Metashape project, and the names Metashape writes in quotes.
 Asked by MICRO-IL-LETTORE-DI-METASHAPE (02-10-2026): 3DSC for Metashape stamps
