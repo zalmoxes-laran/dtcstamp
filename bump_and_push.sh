@@ -5,6 +5,7 @@
 #   ./bump_and_push.sh [patch|minor|major]
 #   ./bump_and_push.sh --tag-only           (or -t)
 #   ./bump_and_push.sh --set <VERSION>
+#   ./bump_and_push.sh --date-changelog <VERSION>   (writes the dates, nothing else)
 #
 # Deliberately the SAME script as s3Dgraphy's, with one difference: the version
 # lives in pyproject.toml and in dtcstamp.py (a single module, not a package),
@@ -20,6 +21,14 @@
 # bump2version edits), commits, tags `v<VERSION>` and pushes. Useful for
 # PEP 440 pre-releases like 0.2.0.dev1 / 0.2.0a1 / 0.2.0rc1 that the
 # default SemVer regex in .bumpversion.cfg cannot parse.
+#
+# THE DATE IN CHANGELOG.md. A version is written there as
+# `## [X] — YYYY-MM-DD` until it is tagged. --set X and --tag-only write the day's
+# date on X's line BEFORE the version commit, so the commit that the tag names
+# carries its own date; any other `YYYY-MM-DD` line whose version is already
+# tagged takes the date of that tag (`git log -1 --format=%cs vX`). A version
+# neither being tagged nor tagged keeps its placeholder. --date-changelog X does
+# only this, and commits nothing.
 
 set -e  # Exit on any error
 
@@ -33,6 +42,7 @@ show_help() {
     echo "Usage: $0 [patch|minor|major]"
     echo "       $0 --tag-only           (alias: -t)"
     echo "       $0 --set <VERSION>"
+    echo "       $0 --date-changelog <VERSION>"
     echo ""
     echo "Automated version bump and push for dtcstamp"
     echo ""
@@ -45,6 +55,10 @@ show_help() {
     echo "  --set VERSION  Set an arbitrary version string in pyproject.toml,"
     echo "                 dtcstamp.py and .bumpversion.cfg, then commit, tag"
     echo "                 vVERSION and push. Useful for PEP 440 pre-releases."
+    echo "  --date-changelog VERSION"
+    echo "                 Only write the dates in CHANGELOG.md (today on VERSION,"
+    echo "                 the tag's date on versions already tagged). No commit."
+    echo "  --set and --tag-only write those dates before they commit or tag."
     echo ""
     echo "NOTE: this bumps the PACKAGE version. STAMP_VERSION and HINTS_VERSION"
     echo "      in dtcstamp.py are the ON-DISK FORMAT versions and are NOT"
@@ -70,6 +84,7 @@ BUMP_TYPE=$1
 
 TAG_ONLY=0
 SET_MODE=0
+DATE_ONLY=0
 SET_VERSION=""
 case "$BUMP_TYPE" in
     --tag-only|-t)
@@ -80,6 +95,15 @@ case "$BUMP_TYPE" in
         SET_VERSION="${2:-}"
         if [ -z "$SET_VERSION" ]; then
             echo -e "${RED}❌ Error: --set requires a VERSION argument${NC}"
+            show_help
+            exit 1
+        fi
+        ;;
+    --date-changelog)
+        DATE_ONLY=1
+        SET_VERSION="${2:-}"
+        if [ -z "$SET_VERSION" ]; then
+            echo -e "${RED}❌ Error: --date-changelog requires a VERSION argument${NC}"
             show_help
             exit 1
         fi
@@ -108,6 +132,36 @@ read_pyproject_version() {
         | head -n1 \
         | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/'
 }
+
+# date_changelog <VERSION being tagged>: every `## [V] — YYYY-MM-DD` line gets a
+# date — today for the version being tagged, the tag's date for one already
+# tagged — and loses the placeholder's comment. Prints one line per date written.
+date_changelog() {
+    local new="$1" today v when v_re
+    [ -f CHANGELOG.md ] || return 0
+    today=$(date +%F)
+    for v in $(LC_ALL=C sed -n -E 's/^## \[([^]]+)\] — YYYY-MM-DD.*/\1/p' CHANGELOG.md); do
+        if [ "$v" = "$new" ]; then
+            when="$today"
+        elif git rev-parse -q --verify "refs/tags/v$v" > /dev/null; then
+            when=$(git log -1 --format=%cs "v$v")
+        else
+            continue
+        fi
+        v_re="${v//./\\.}"   # a PEP 440 version: only the dots are special
+        LC_ALL=C sed -i.bak -E "s/^(## \[${v_re}\] — )YYYY-MM-DD( <!--[^>]*-->)?/\1${when}/" CHANGELOG.md
+        rm -f CHANGELOG.md.bak
+        echo -e "${BLUE}📅 CHANGELOG.md: [$v] — $when${NC}"
+    done
+}
+
+# ---------------------------------------------------------------------------
+# --date-changelog mode
+# ---------------------------------------------------------------------------
+if [ "$DATE_ONLY" -eq 1 ]; then
+    date_changelog "$SET_VERSION"
+    exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # --tag-only mode
@@ -142,6 +196,11 @@ if [ "$TAG_ONLY" -eq 1 ]; then
     if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
         echo -e "${YELLOW}ℹ️  Tag $TAG already exists locally — skipping tag creation${NC}"
     else
+        date_changelog "$CURRENT_VERSION"
+        if ! git diff --quiet -- CHANGELOG.md; then
+            git add CHANGELOG.md
+            git commit -m "Date the changelog for $TAG"
+        fi
         echo -e "${BLUE}🏷  Creating tag $TAG at HEAD...${NC}"
         git tag -a "$TAG" -m "Release $TAG"
         echo -e "${GREEN}✅ Tag $TAG created${NC}"
@@ -234,7 +293,10 @@ if [ "$SET_MODE" -eq 1 ]; then
         exit 1
     fi
 
+    date_changelog "$NEW_VERSION"
+
     git add pyproject.toml dtcstamp.py .bumpversion.cfg
+    [ -f CHANGELOG.md ] && git add CHANGELOG.md
     git commit -m "Bump version: ${CURRENT_VERSION} → ${NEW_VERSION}"
     git tag -a "$TAG" -m "$TAG"
     echo -e "${GREEN}✅ Commit + tag $TAG created${NC}"
