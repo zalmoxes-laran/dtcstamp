@@ -38,7 +38,7 @@ jobs:
   # LA SUITE SU OGNI VERSIONE CHE IL PACCHETTO PROMETTE. `requires-python` è una
   # riga in un file finché nessuno la mette alla prova; qui diventa una misura.
   suite:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -63,7 +63,7 @@ jobs:
   # rende impossibile da dimenticare: se un domani qualcuno abbassa la versione
   # qui, il lavoro si ferma invece di diventare verde a vuoto.
   zero-dependencies:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v5
       with:
@@ -84,7 +84,7 @@ jobs:
   manual-publish:
     needs: [suite, zero-dependencies]
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Trusted publishing (OIDC), come s3Dgraphy: nessun token nei secrets.
     # `id-token: write` permette all'action di chiedere a GitHub un token a vita
     # breve che PyPI accetta solo da questo repo e da questo workflow; con lui
