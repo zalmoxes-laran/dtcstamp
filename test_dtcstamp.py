@@ -181,6 +181,14 @@ class Corpus(unittest.TestCase):
             _materialise(spec["files"], tmp)
             # ONE CONTENT, TWO FORMS: the folder gives what the archive gives
             self.assertEqual(S.content_digest(tmp), expect["content_digest"])
+            if expect["canonical"]:
+                # EVERY WRITER reproduces the canonical archive — this one too
+                with tempfile.TemporaryDirectory() as out:
+                    made = S.write_canonical_3tz(tmp, str(pathlib.Path(out, "t.3tz")))
+                    self.assertEqual(made["sha256"], expect["archive_sha256"])
+                    self.assertEqual(made["content_digest"]["digest"],
+                                     expect["content_digest"])
+                    self.assertEqual(made["content_digest"]["computed_by"], "producer")
             if "members" in expect:
                 self.assertEqual(S.tree_members(tmp), expect["members"])
             if "files" in expect:
@@ -910,6 +918,51 @@ class Trees(unittest.TestCase):
             self.assertFalse(S.is_canonical_3tz(deflated)["canonical"])
             # the UTF-8 flag on the non-ASCII name is part of the profile
             self.assertEqual(S.tree_members(src)[0]["path"], "Data/città.b3dm")
+
+    def test_the_writer_is_canonical_and_names_its_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            made = S.write_canonical_3tz(src, str(pathlib.Path(tmp, "w.3tz")))
+            self.assertTrue(S.is_canonical_3tz(made["path"])["canonical"],
+                            S.is_canonical_3tz(made["path"])["reasons"])
+            self.assertEqual(made["sha256"], S.file_digest(made["path"]))
+            self.assertEqual(made["content_digest"]["digest"], S.content_digest(src))
+            self.assertEqual(made["content_digest"]["files"], made["entries"])
+            # the same folder twice: the same bytes (the date is not the moment)
+            again = S.write_canonical_3tz(src, str(pathlib.Path(tmp, "w2.3tz")))
+            self.assertEqual(again["sha256"], made["sha256"])
+
+    def test_the_writer_gives_3dsc_s_bytes(self):
+        # CONFORMANCE: the writer was taken from 3DSC, and the two must give
+        # the same sha256 on the same folder (the copy is held to the source)
+        import importlib.util
+        source = HERE.parent / "3D-survey-collection" / "cesium_exporter" / "archive_3tz.py"
+        if not source.is_file():
+            self.skipTest("3D-survey-collection is not checked out beside dtcstamp")
+        spec = importlib.util.spec_from_file_location("_archive_3tz_3dsc", source)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            ours = S.write_canonical_3tz(src, str(pathlib.Path(tmp, "ours.3tz")))
+            theirs = mod.write_3tz(src, str(pathlib.Path(tmp, "theirs.3tz")))
+            self.assertEqual(ours["sha256"], "sha256:" + theirs["sha256"])
+            self.assertEqual(ours["content_digest"]["digest"],
+                             theirs["content_digest"]["digest"])
+
+    def test_the_writer_refuses_and_leaves_nothing_half_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = _small_tree(pathlib.Path(tmp, "src"))
+            with self.assertRaises(ValueError):          # inside the folder it packs
+                S.write_canonical_3tz(src, str(pathlib.Path(src, "in.3tz")))
+            bare = pathlib.Path(tmp, "bare")
+            (bare / "Data").mkdir(parents=True)
+            (bare / "Data" / "a.b3dm").write_bytes(b"b3dm")
+            out = pathlib.Path(tmp, "bare.3tz")
+            with self.assertRaises(ValueError):          # no tileset.json at the root
+                S.write_canonical_3tz(str(bare), str(out))
+            self.assertFalse(out.exists())
+            self.assertFalse(pathlib.Path(str(out) + ".part").exists())
 
     def test_a_name_in_nfd_is_not_canonical_and_the_content_does_not_care(self):
         # macOS hands «città» over as «citta» + U+0300: a writer that does not

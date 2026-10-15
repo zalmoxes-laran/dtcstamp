@@ -9,6 +9,28 @@ are the on-disk format versions, and they change only when a file written by
 an older reader stops being readable. A release that leaves them untouched has
 not changed the format.
 
+## [Unreleased]
+
+### Added
+- `write_canonical_3tz(src_dir, out_path, *, progress=None)` — the writer of
+  the canonical `.3tz` profile (`profiles/3tz.md`), in the package that owns
+  the profile. **Taken, not rewritten**: 3D Survey Collection's
+  `cesium_exporter/archive_3tz.write_3tz` (commit `11b2ecb`, file sha256
+  `518ca8ff…`) with `compress=False` fixed, the only setting that is the
+  profile. Returns `{path, entries, bytes, sha256, content_digest, seconds}`:
+  `sha256` written `sha256:<hex>`, `content_digest` `{digest, files,
+  computed_by: "producer"}` hashed while copying. Asked by s3Dgraphy's room
+  importer (MICRO-ROOM-IMPORT, 15-10-2026: `--pack-tilesets 3tz`); 3DSC will
+  call it in a later step.
+- Conformance: every canonical tree case (`20`, `23`) is now also WRITTEN by
+  this writer and must give `archive_sha256`; a test runs 3DSC's own module
+  (when checked out beside) and this one on the same folder and asks for the
+  same sha256. **Measured** on Templu Mare's Cesium tileset (7302 files,
+  199 378 580 bytes): this writer, 3DSC's and the delivered `TempluMare.3tz`
+  give the same `sha256:9c82fe09…`, content digest `sha256:55c4dfb3…`.
+
+**The format did not change.** `STAMP_VERSION = 1`, `HINTS_VERSION = 1`.
+
 ## [0.1.4] — 2026-10-02
 
 An asset inside a Metashape project, and the names Metashape writes in quotes.

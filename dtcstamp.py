@@ -1417,6 +1417,132 @@ def is_canonical_3tz(path: str) -> Dict[str, Any]:
             "create_versions": sorted({i.create_version for i in infos})}
 
 
+# ── the writer of the profile (15-10-2026) ───────────────────────────────────
+#
+# TAKEN, NOT REWRITTEN: `write_3tz` of 3D Survey Collection
+# (`cesium_exporter/archive_3tz.py`, commit `11b2ecb`, sha256 of the file
+# `518ca8ff…`), with `compress=False` fixed — the only setting that is the
+# profile. The package that owns the profile owns its writer, so a tool that
+# needs a canonical `.3tz` (s3Dgraphy's room importer, `--pack-tilesets 3tz`)
+# imports it from here and not from an add-on. 3DSC will call this one in a
+# later step; until then the two are held to the same bytes by
+# `test_dtcstamp.py` (the conformance cases 20 and 23, and the same folder
+# through both writers).
+
+_BLOCK_3TZ = 1 << 20
+_MAX_ENTRY_3TZ = 4 * 1024 ** 3           # the spec: 4 GB per file
+_ZIP64_LIMIT = 0xFFFFFFFF
+_TILESET = "tileset.json"
+
+
+def _archive_name(path: str) -> str:
+    """Archive path of an entry: Unicode NFC, forward slashes, no leading
+    slash (3DSC's `normalize`)."""
+    return unicodedata.normalize("NFC", path).replace("\\", "/").lstrip("/")
+
+
+def _zinfo_3tz(name: str, size: int) -> zipfile.ZipInfo:
+    zi = zipfile.ZipInfo(name, date_time=CANONICAL_3TZ["date_time"])
+    zi.compress_type = zipfile.ZIP_STORED
+    zi.create_system = 3                          # unix, whatever the host
+    zi.external_attr = (0o100644 & 0xFFFF) << 16
+    zi.file_size = size
+    return zi
+
+
+def _tree_entries(src_dir: str) -> List[Tuple[str, str]]:
+    """``[(archive path, path on disk relative to src_dir)]`` sorted by the
+    UTF-8 bytes of the archive path. The two differ when the disk holds a
+    name in NFD (macOS) or with backslashes."""
+    by_name: Dict[str, str] = {}
+    for root, dirs, files in os.walk(src_dir):
+        dirs.sort()
+        for f in files:
+            if f in SKIP_NAMES:
+                continue
+            disk = os.path.relpath(os.path.join(root, f), src_dir)
+            rel = _archive_name(disk)
+            if ".3tz" in rel.lower():
+                raise ValueError(f"a 3tz must not contain '.3tz' paths: {rel}")
+            if rel in by_name:
+                raise ValueError(
+                    f"two files have the same name in NFC, {rel!r}: "
+                    f"{by_name[rel]!r} and {disk!r}")
+            by_name[rel] = disk
+    if _TILESET not in by_name:
+        raise ValueError(f"tileset.json must be at the root of {src_dir}")
+    return sorted(by_name.items(), key=lambda kv: kv[0].encode("utf-8"))
+
+
+def write_canonical_3tz(src_dir: str, out_path: str, *,
+                        progress: Optional[Callable[[int, int], None]] = None
+                        ) -> Dict[str, Any]:
+    """Pack the tileset folder ``src_dir`` (``tileset.json`` at its root) into
+    ``out_path``, in the canonical profile (``profiles/3tz.md``): the same
+    folder gives the same bytes on any machine, so the file's sha256 names its
+    content.
+
+    → ``{path, entries, bytes, sha256, content_digest, seconds}``: ``sha256``
+    is ``sha256:<hex>`` of the archive; ``content_digest`` is ``{digest,
+    files, computed_by: "producer"}``, hashed from the bytes as they are
+    copied — the same value :func:`content_digest` gives the folder and the
+    archive. ``progress(done, total)`` after each entry. The archive is written
+    to ``<out_path>.part`` and renamed at the end: a failed write never leaves
+    half an archive under the final name. Files are copied in blocks.
+    """
+    import time
+    t0 = time.time()
+    src_dir = os.path.abspath(src_dir)
+    out_path = os.path.abspath(out_path)
+    if out_path.startswith(src_dir.rstrip(os.sep) + os.sep):
+        raise ValueError("the archive must not be written inside the folder it packs")
+    entries = _tree_entries(src_dir)
+    total = len(entries)
+    part = out_path + ".part"
+    records: List[Tuple[bytes, int]] = []
+    hashed: List[Dict[str, Any]] = []
+    try:
+        with zipfile.ZipFile(part, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+            for i, (rel, disk) in enumerate(entries, start=1):
+                src = os.path.join(src_dir, disk)
+                size = os.path.getsize(src)
+                if size > _MAX_ENTRY_3TZ:
+                    raise ValueError(f"{rel}: {size} bytes, over the 4 GB per-file limit")
+                zi = _zinfo_3tz(rel, size)
+                h = hashlib.sha256()
+                with open(src, "rb") as fh, \
+                        zf.open(zi, "w", force_zip64=size >= _ZIP64_LIMIT) as dst:
+                    for chunk in iter(lambda: fh.read(_BLOCK_3TZ), b""):
+                        h.update(chunk)
+                        dst.write(chunk)
+                hashed.append({"path": rel, "digest": "sha256:" + h.hexdigest(),
+                               "role": ENTRY_POINT if rel == _TILESET else MEMBER})
+                records.append((hashlib.md5(rel.encode("utf-8")).digest(),
+                                zi.header_offset))
+                if progress is not None:
+                    progress(i, total)
+            records.sort(key=lambda r: struct.unpack("<QQ", r[0]))
+            index = b"".join(md5 + struct.pack("<Q", off) for md5, off in records)
+            zf.writestr(_zinfo_3tz(INDEX_NAME_3TZ, len(index)), index)
+        os.replace(part, out_path)
+    except BaseException:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        raise
+    rows = canonical_members(hashed)
+    return {
+        "path": out_path,
+        "entries": total,
+        "bytes": os.path.getsize(out_path),
+        "sha256": file_digest(out_path),
+        "content_digest": {"digest": members_digest(rows), "files": len(rows),
+                           "computed_by": "producer"},
+        "seconds": round(time.time() - t0, 3),
+    }
+
+
 # ── a file set: an entry point and the files it calls ────────────────────────
 #
 # The members of a file set are FOUND, not listed by hand: from the entry
@@ -2041,7 +2167,7 @@ __all__ = [
     "MEMBER", "MEMBER_ROLES", "MEMBERS_EOL", "MEMBERS_SEPARATOR", "PACKAGINGS",
     "SKIP_NAMES", "blend_locator", "canonical_members", "content_digest",
     "content_digest_block", "file_set_stamp_path", "follow_references",
-    "is_canonical_3tz", "member_path", "members_canonical", "members_digest",
+    "is_canonical_3tz", "member_path", "write_canonical_3tz", "members_canonical", "members_digest",
     "new_datablock_stamp", "new_file_set_stamp", "new_tree_stamp",
     "parse_blend_locator", "same_content", "tree_members", "unclaimed_files",
     "verify_members", "verify_tree",
